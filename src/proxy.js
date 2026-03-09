@@ -172,6 +172,8 @@ export async function proxyRequest({ req, res, logger, config }) {
     let rawBodyText = '';
     let matchedCategory = null;
     let appliedActions = [];
+    const payloadLoggingEnabled = shouldLogPayloads(logger);
+    const payloadLogMaxBytes = payloadLoggingEnabled ? getPayloadLogMaxBytes() : 0;
 
     if (shouldInspectBody(req, categories)) {
       const rawBuffer = await readRequestBody(req);
@@ -218,15 +220,14 @@ export async function proxyRequest({ req, res, logger, config }) {
         'request classification complete',
       );
 
-      if (shouldLogPayloads(logger)) {
-        const maxBytes = getPayloadLogMaxBytes();
-        const incoming = payloadPreviewFromBuffer(rawBuffer, maxBytes);
-        const outgoing = payloadPreviewFromBuffer(outgoingBuffer, maxBytes);
+      if (payloadLoggingEnabled) {
+        const incoming = payloadPreviewFromBuffer(rawBuffer, payloadLogMaxBytes);
+        const outgoing = payloadPreviewFromBuffer(outgoingBuffer, payloadLogMaxBytes);
 
         logger.debug(
           {
             path: requestPath,
-            payloadLogMaxBytes: maxBytes,
+            payloadLogMaxBytes: payloadLogMaxBytes,
             incomingPayload: incoming.text,
             incomingPayloadBytes: incoming.bytes,
             incomingPayloadTruncated: incoming.truncated,
@@ -266,6 +267,44 @@ export async function proxyRequest({ req, res, logger, config }) {
     if (!responseBody) {
       res.end();
       return;
+    }
+
+    if (payloadLoggingEnabled) {
+      let responsePayloadBytes = 0;
+      let responsePreviewBytes = 0;
+      const responsePreviewChunks = [];
+
+      responseBody.on('data', (chunk) => {
+        const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        responsePayloadBytes += chunkBuffer.byteLength;
+
+        if (responsePreviewBytes >= payloadLogMaxBytes) {
+          return;
+        }
+
+        const remaining = payloadLogMaxBytes - responsePreviewBytes;
+        const previewChunk =
+          chunkBuffer.byteLength > remaining ? chunkBuffer.subarray(0, remaining) : chunkBuffer;
+
+        responsePreviewChunks.push(previewChunk);
+        responsePreviewBytes += previewChunk.byteLength;
+      });
+
+      responseBody.on('end', () => {
+        const responsePreview = Buffer.concat(responsePreviewChunks).toString('utf8');
+
+        logger.debug(
+          {
+            path: requestPath,
+            statusCode: upstreamResponse.statusCode,
+            payloadLogMaxBytes: payloadLogMaxBytes,
+            responsePayload: responsePreview,
+            responsePayloadBytes: responsePayloadBytes,
+            responsePayloadTruncated: responsePayloadBytes > payloadLogMaxBytes,
+          },
+          'response payload debug',
+        );
+      });
     }
 
     responseBody.on('error', (error) => {

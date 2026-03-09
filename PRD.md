@@ -12,5 +12,5 @@ The reverse proxy:
 - can apply actions to categories, like replacing model name and adding/replacing/changing context size (or other completions API related fields)
 - provides structured logs
 - keeps payload content out of normal logs by default
-- supports debug-only payload logging controlled by environment flags
+- supports debug-only request/response payload logging controlled by environment flags
 - supports configurable upstream timeout via environment variable (`UPSTREAM_TIMEOUT_MS`) with default `60000`

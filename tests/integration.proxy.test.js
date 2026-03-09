@@ -297,6 +297,9 @@ describe('proxy integration', () => {
     expect(response.status).toBe(200);
 
     const payloadLog = logger.entries.find((entry) => entry.level === 'debug' && entry.msg === 'request payload debug');
+    const responsePayloadLog = logger.entries.find(
+      (entry) => entry.level === 'debug' && entry.msg === 'response payload debug',
+    );
 
     expect(payloadLog).toBeDefined();
     expect(payloadLog.obj.incomingPayloadBytes).toBeGreaterThan(24);
@@ -304,6 +307,11 @@ describe('proxy integration', () => {
     expect(payloadLog.obj.outgoingPayloadBytes).toBeGreaterThan(24);
     expect(payloadLog.obj.outgoingPayloadTruncated).toBe(true);
     expect(payloadLog.obj.outgoingPayload).toContain('codellama');
+
+    expect(responsePayloadLog).toBeDefined();
+    expect(responsePayloadLog.obj.responsePayloadBytes).toBeGreaterThan(24);
+    expect(responsePayloadLog.obj.responsePayloadTruncated).toBe(true);
+    expect(responsePayloadLog.obj.responsePayload).toContain('codellama');
   });
 
   it('returns 400 for invalid JSON body when inspection is required', async () => {

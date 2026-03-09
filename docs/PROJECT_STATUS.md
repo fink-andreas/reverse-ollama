@@ -37,6 +37,7 @@
 - Fixed proxy compatibility with clients sending `Expect` header by filtering unsupported `Expect` before undici upstream dispatch
 - Added integration test coverage for `Expect: 100-continue` forwarding behavior
 - Increased default upstream timeout to `60000ms` (configurable via `UPSTREAM_TIMEOUT_MS`)
+- Added debug response payload logging (truncated by `LOG_PAYLOAD_MAX_BYTES`) alongside existing request payload debug logging
 
 ---
 
