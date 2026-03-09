@@ -189,7 +189,7 @@ The implementation must provide:
   - duration
   - error
 - Avoid logging full prompts by default
-- Add debug mode if needed
+- Add debug mode for optional payload logging with explicit opt-in flags
 
 **Deliverable:**
 - Logs are machine-readable and suitable for journald ingestion
@@ -198,6 +198,7 @@ The implementation must provide:
 - each request has one start/end traceable via request ID
 - errors include context
 - matched categories/actions are visible
+- payload logging stays disabled by default and is available only in debug mode with explicit opt-in
 
 ---
 

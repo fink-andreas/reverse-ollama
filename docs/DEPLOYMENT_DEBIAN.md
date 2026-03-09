@@ -42,6 +42,12 @@ Follow logs:
 sudo journalctl -u reverse-ollama -f
 ```
 
+Pretty-print structured logs:
+
+```bash
+sudo journalctl -u reverse-ollama -f -o cat | jq .
+```
+
 ---
 
 ## 4) If systemd cannot find `node`
@@ -137,7 +143,35 @@ sudo systemctl restart reverse-ollama
 
 ---
 
-## 7) Verify deployment
+## 7) Optional: enable debug payload logs (short-term troubleshooting)
+Only enable this temporarily because payloads can include sensitive prompt content.
+
+```bash
+sudo systemctl edit reverse-ollama
+```
+
+Add:
+
+```ini
+[Service]
+Environment=LOG_LEVEL=debug
+Environment=LOG_PAYLOADS=true
+Environment=LOG_PAYLOAD_MAX_BYTES=4096
+```
+
+Apply and inspect logs:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart reverse-ollama
+sudo journalctl -u reverse-ollama -f -o cat | jq .
+```
+
+To disable again, remove these overrides and restart the service.
+
+---
+
+## 8) Verify deployment
 Use the configured service port (default `11435`, or your override value):
 
 ```bash
@@ -149,7 +183,7 @@ Expected:
 
 ---
 
-## 8) Useful operations
+## 9) Useful operations
 Restart service:
 
 ```bash

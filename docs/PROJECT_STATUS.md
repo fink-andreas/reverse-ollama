@@ -29,6 +29,11 @@
 - Added `README.md` with architecture, config format, run steps, systemd deployment, and troubleshooting
 - Documented neutral systemd override usage for absolute Node path and custom port (`override.conf`)
 - Added Debian deployment runbook: `docs/DEPLOYMENT_DEBIAN.md`
+- Added debug-only payload logging controls:
+  - `LOG_PAYLOADS=true` (explicit opt-in)
+  - requires `LOG_LEVEL=debug`/`trace`
+  - `LOG_PAYLOAD_MAX_BYTES` truncation guard
+- Added integration test coverage for payload debug logging behavior
 
 ---
 
@@ -52,6 +57,7 @@
 
 ## Current Focus
 - All main milestones are complete.
+- Logging hardening update completed for debug-only payload visibility behind explicit environment flags.
 - Next optional phase: production hardening and operational polish.
 
 ---

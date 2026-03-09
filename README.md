@@ -35,6 +35,8 @@ Environment variables:
 - `OLLAMA_UPSTREAM` (default `http://127.0.0.1:11434`)
 - `REVERSE_OLLAMA_CONFIG` (default `config/categories.json`)
 - `LOG_LEVEL` (default `info`)
+- `LOG_PAYLOADS` (default `false`; payload logging requires `LOG_LEVEL=debug` or `trace`)
+- `LOG_PAYLOAD_MAX_BYTES` (default `4096`; truncation limit for payload debug logs)
 
 ## Configuration
 Default config path: `config/categories.json`
@@ -120,6 +122,19 @@ Check status/logs:
 ```bash
 systemctl status reverse-ollama
 journalctl -u reverse-ollama -f
+```
+
+Enable debug payload logs temporarily:
+```bash
+LOG_LEVEL=debug LOG_PAYLOADS=true npm start
+```
+
+For systemd, add an override:
+```ini
+[Service]
+Environment=LOG_LEVEL=debug
+Environment=LOG_PAYLOADS=true
+Environment=LOG_PAYLOAD_MAX_BYTES=4096
 ```
 
 ### Local systemd override (custom Node path / custom port)

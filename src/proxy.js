@@ -101,6 +101,48 @@ function safeJsonParse(raw) {
   }
 }
 
+function isTruthyEnv(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
+}
+
+function shouldLogPayloads(logger) {
+  if (!isTruthyEnv(process.env.LOG_PAYLOADS)) {
+    return false;
+  }
+
+  if (typeof logger?.isLevelEnabled === 'function') {
+    return logger.isLevelEnabled('debug');
+  }
+
+  const level = String(process.env.LOG_LEVEL || 'info').toLowerCase();
+  return level === 'debug' || level === 'trace';
+}
+
+function getPayloadLogMaxBytes() {
+  const value = Number(process.env.LOG_PAYLOAD_MAX_BYTES || 4096);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 4096;
+}
+
+function payloadPreviewFromBuffer(buffer, maxBytes) {
+  if (!Buffer.isBuffer(buffer)) {
+    return { text: '', bytes: 0, truncated: false };
+  }
+
+  if (buffer.byteLength <= maxBytes) {
+    return {
+      text: buffer.toString('utf8'),
+      bytes: buffer.byteLength,
+      truncated: false,
+    };
+  }
+
+  return {
+    text: buffer.subarray(0, maxBytes).toString('utf8'),
+    bytes: buffer.byteLength,
+    truncated: true,
+  };
+}
+
 export async function proxyRequest({ req, res, logger, config }) {
   const upstreamBase = process.env.OLLAMA_UPSTREAM || DEFAULT_UPSTREAM;
   const upstreamUrl = new URL(req.url || '/', upstreamBase);
@@ -174,6 +216,26 @@ export async function proxyRequest({ req, res, logger, config }) {
         },
         'request classification complete',
       );
+
+      if (shouldLogPayloads(logger)) {
+        const maxBytes = getPayloadLogMaxBytes();
+        const incoming = payloadPreviewFromBuffer(rawBuffer, maxBytes);
+        const outgoing = payloadPreviewFromBuffer(outgoingBuffer, maxBytes);
+
+        logger.debug(
+          {
+            path: requestPath,
+            payloadLogMaxBytes: maxBytes,
+            incomingPayload: incoming.text,
+            incomingPayloadBytes: incoming.bytes,
+            incomingPayloadTruncated: incoming.truncated,
+            outgoingPayload: outgoing.text,
+            outgoingPayloadBytes: outgoing.bytes,
+            outgoingPayloadTruncated: outgoing.truncated,
+          },
+          'request payload debug',
+        );
+      }
     }
 
     const contentLength = Buffer.isBuffer(requestBodyStream) ? requestBodyStream.byteLength : undefined;

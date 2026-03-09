@@ -69,6 +69,7 @@
 - [x] Include applied actions in logs
 - [x] Include duration and upstream status
 - [x] Avoid logging full prompts by default
+- [x] Add debug-only payload logging behind explicit env flags
 
 ### Milestone 8: Error handling and resilience
 - [x] Handle upstream unavailable errors
