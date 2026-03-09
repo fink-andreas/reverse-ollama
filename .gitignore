@@ -140,3 +140,9 @@ vite.config.ts.timestamp-*
 
 # Local scratch notes
 TODO
+
+# Local runtime config overrides
+config/categories.json
+
+# Local planning notes
+docs/TODO.md

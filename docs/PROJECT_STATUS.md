@@ -34,6 +34,8 @@
   - requires `LOG_LEVEL=debug`/`trace`
   - `LOG_PAYLOAD_MAX_BYTES` truncation guard
 - Added integration test coverage for payload debug logging behavior
+- Fixed proxy compatibility with clients sending `Expect` header by filtering unsupported `Expect` before undici upstream dispatch
+- Added integration test coverage for `Expect: 100-continue` forwarding behavior
 
 ---
 

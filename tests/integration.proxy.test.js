@@ -28,6 +28,37 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 1500) {
   });
 }
 
+async function httpRequestWithHeaders({ host = '127.0.0.1', port, path: requestPath = '/', method = 'GET', headers = {}, body = null }) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host,
+        port,
+        path: requestPath,
+        method,
+        headers,
+      },
+      async (res) => {
+        const chunks = [];
+        for await (const chunk of res) chunks.push(chunk);
+        resolve({
+          statusCode: res.statusCode,
+          headers: res.headers,
+          body: Buffer.concat(chunks).toString('utf8'),
+        });
+      },
+    );
+
+    req.on('error', reject);
+
+    if (body) {
+      req.write(body);
+    }
+
+    req.end();
+  });
+}
+
 function createMemoryLogger({ debugEnabled = false } = {}) {
   const entries = [];
 
@@ -124,6 +155,51 @@ describe('proxy integration', () => {
     const streamText = await streamResponse.text();
     expect(streamText).toContain('chunk-1');
     expect(streamText).toContain('chunk-2');
+  });
+
+  it('strips expect header before forwarding to undici upstream', async () => {
+    const upstream = http.createServer(async (req, res) => {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          expectHeader: req.headers.expect || null,
+          body: Buffer.concat(chunks).toString('utf8'),
+        }),
+      );
+    });
+
+    const upstreamPort = await listen(upstream);
+    servers.push(upstream);
+
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'reverse-ollama-test-'));
+    const configPath = path.join(tempDir, 'categories.json');
+    await writeFile(configPath, JSON.stringify({ categories: [] }), 'utf8');
+
+    const proxyPort = await getFreePort();
+    process.env.REVERSE_OLLAMA_CONFIG = configPath;
+    process.env.OLLAMA_UPSTREAM = `http://127.0.0.1:${upstreamPort}`;
+
+    const proxy = await createReverseOllamaServer({ host: '127.0.0.1', port: proxyPort });
+    await proxy.start();
+    servers.push(proxy);
+
+    const response = await httpRequestWithHeaders({
+      port: proxyPort,
+      path: '/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        expect: '100-continue',
+      },
+      body: JSON.stringify({ model: 'gpt-oss:120b', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = JSON.parse(response.body);
+    expect(json.expectHeader).toBeNull();
   });
 
   it('applies category-based model replacement', async () => {

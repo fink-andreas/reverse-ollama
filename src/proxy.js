@@ -13,6 +13,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   'trailers',
   'transfer-encoding',
   'upgrade',
+  'expect',
 ]);
 
 function toNodeReadable(body) {
