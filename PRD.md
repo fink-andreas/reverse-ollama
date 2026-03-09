@@ -13,3 +13,4 @@ The reverse proxy:
 - provides structured logs
 - keeps payload content out of normal logs by default
 - supports debug-only payload logging controlled by environment flags
+- supports configurable upstream timeout via environment variable (`UPSTREAM_TIMEOUT_MS`) with default `60000`

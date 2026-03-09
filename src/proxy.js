@@ -151,7 +151,7 @@ export async function proxyRequest({ req, res, logger, config }) {
   const categories = config?.categories || [];
 
   const abortController = new AbortController();
-  const upstreamTimeoutMs = Number(process.env.UPSTREAM_TIMEOUT_MS || 10000);
+  const upstreamTimeoutMs = Number(process.env.UPSTREAM_TIMEOUT_MS || 60000);
 
   const onRequestAborted = () => {
     abortController.abort('client request aborted');

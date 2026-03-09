@@ -34,6 +34,7 @@ Environment variables:
 - `HOST` (default `0.0.0.0`)
 - `OLLAMA_UPSTREAM` (default `http://127.0.0.1:11434`)
 - `REVERSE_OLLAMA_CONFIG` (default `config/categories.json`)
+- `UPSTREAM_TIMEOUT_MS` (default `60000`)
 - `LOG_LEVEL` (default `info`)
 - `LOG_PAYLOADS` (default `false`; payload logging requires `LOG_LEVEL=debug` or `trace`)
 - `LOG_PAYLOAD_MAX_BYTES` (default `4096`; truncation limit for payload debug logs)
