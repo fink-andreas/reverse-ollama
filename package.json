@@ -1,0 +1,24 @@
+{
+  "name": "reverse-ollama",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reverse proxy for Ollama with request categorization and transformations",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "pino": "^9.9.4",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,20 @@
+[Unit]
+Description=reverse-ollama (Ollama reverse proxy)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/afi/dvl/reverse-ollama
+ExecStart=/usr/bin/env node /home/afi/dvl/reverse-ollama/src/server.js
+Environment=NODE_ENV=production
+Environment=PORT=11435
+Environment=HOST=0.0.0.0
+Environment=OLLAMA_UPSTREAM=http://127.0.0.1:11434
+Environment=REVERSE_OLLAMA_CONFIG=/home/afi/dvl/reverse-ollama/config/categories.json
+Restart=on-failure
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
