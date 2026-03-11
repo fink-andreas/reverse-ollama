@@ -11,6 +11,7 @@ It listens on `11435` (default), forwards traffic to `127.0.0.1:11434`, supports
 - Configurable actions per category:
   - replace `model`
   - set `options.num_ctx`
+  - deduplicate repeated instruction lines in `prompt` / `input` / `messages[].content` (`actions.deduplication: true`) when at least 60 characters are affected
   - shallow merge top-level fields via `actions.set`
 - Structured JSON logs (journald-friendly)
 - systemd service unit for Debian
@@ -90,6 +91,7 @@ Example config:
       "actions": {
         "model": "codellama:latest",
         "num_ctx": 16384,
+        "deduplication": true,
         "set": {
           "temperature": 0.2
         }

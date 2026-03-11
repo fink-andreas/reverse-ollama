@@ -9,7 +9,7 @@ describe('config validation', () => {
           name: 'coding',
           endpoints: ['/api/chat'],
           match: { messagesRegex: 'code|debug', flags: 'i' },
-          actions: { model: 'codellama:latest', num_ctx: 8192 },
+          actions: { model: 'codellama:latest', num_ctx: 8192, deduplication: true },
         },
       ],
     };

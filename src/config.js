@@ -43,6 +43,7 @@ const schema = {
             properties: {
               model: { type: 'string', minLength: 1 },
               num_ctx: { type: 'integer', minimum: 1 },
+              deduplication: { type: 'boolean' },
               set: { type: 'object' },
             },
           },

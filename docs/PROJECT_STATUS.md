@@ -21,6 +21,7 @@
   - model replacement
   - `options.num_ctx` set/override
   - optional shallow merge via `actions.set`
+  - optional request-text deduplication via `actions.deduplication` for `prompt`, `input`, and `messages[].content`
 - Implemented structured logging with request metadata and category/action fields
 - Implemented error handling for invalid JSON, upstream failures, and timeouts
 - Implemented graceful shutdown and config reload (`SIGHUP`)
@@ -55,10 +56,14 @@
 - Added token and request-time fields to session detail header in viewer
 - Added proxy session metadata field `_proxy.durationMs` to support viewer request-time display
 - Fixed viewer message rendering to preserve line breaks for user/assistant/system content (`.message-content { white-space: pre-wrap }`)
-- Added safe basic Markdown rendering for viewer message content (headings, lists, bold/italic, inline code)
-- Fixed HTML-template escaping in viewer markdown renderer to avoid browser syntax errors (unterminated regex)
-- Reduced session viewer paragraph spacing in rendered message content for denser readability
-- Reworked viewer typography CSS to use dedicated content line-height and tighter markdown block spacing
+- Rendered viewer message content as plain escaped text with preserved line breaks (no Markdown-to-HTML conversion)
+- Fixed HTML-template escaping issues in embedded viewer message rendering logic
+- Reduced session viewer paragraph/typography spacing for denser readability
+- Reworked viewer typography CSS to use dedicated content line-height decoupled from layout spacing
+- Refined viewer message typography with container font-size reset and explicit message-content text sizing/paragraph line-height
+- Unified message text block rendering structure for user/assistant/system to ensure consistent line rendering behavior
+- Updated viewer plain-text renderer to emit paragraph tags from blank-line-separated content (with `<br>` for intra-paragraph line breaks)
+- Refined deduplication strategy to a scalable threshold-based approach: deduplication is applied only when duplicate removal impact reaches at least 60 affected characters (reverted special-case handling)
 
 ---
 

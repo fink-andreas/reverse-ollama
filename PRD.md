@@ -10,6 +10,7 @@ The reverse proxy:
 - supports detection of specific request categories via regexp
 - has configurable categories (e.g. via JSON config file)
 - can apply actions to categories, like replacing model name and adding/replacing/changing context size (or other completions API related fields)
+- supports optional instruction deduplication action (`actions.deduplication: true`) that removes repeated lines in `prompt`, `input`, and `messages[].content` only if deduplication impact crosses a minimum threshold (default: 60 affected characters)
 - provides structured logs
 - keeps payload content out of normal logs by default
 - supports debug-only request/response payload logging controlled by environment flags
@@ -23,5 +24,5 @@ The reverse proxy:
   - first screen lists sessions; selecting a session shows details and a back button
   - session list columns include `Tokens` (in/out per request) and `Time` (request-to-response duration)
   - session detail header also shows `Tokens` (in/out) and request `Time`
-  - session detail message bodies preserve line breaks and render basic Markdown safely (e.g. headings, lists, bold/italic, inline code)
+  - session detail message bodies preserve line breaks and are rendered as plain escaped text (no Markdown-to-HTML conversion)
   - browser back/forward navigation must mirror in-app navigation between list and detail views

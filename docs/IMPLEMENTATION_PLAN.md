@@ -360,4 +360,6 @@ The MVP is done when:
 - Enforced mandatory viewer authentication (`SESSION_VIEWER_PASSWORD` required)
 - Added dedicated viewer systemd unit (`systemd/reverse-ollama-viewer.service`)
 - Extended session viewer list with per-request token usage (in/out) and request-to-response duration columns
-- Updated viewer detail message rendering to preserve line breaks and render safe basic Markdown
+- Updated viewer detail message rendering to preserve line breaks using plain escaped text (no Markdown-to-HTML conversion)
+- Added optional transformation action `actions.deduplication` to remove duplicate instruction lines in request text fields (`prompt`, `input`, `messages[].content`)
+- Refined deduplication behavior with a generic minimum-impact threshold (default 60 affected characters) instead of brittle content-specific handling

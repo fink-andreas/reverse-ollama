@@ -230,6 +230,7 @@ function getViewerHtml() {
       --line-height: 18px;
       --content-line-height: 1.35;
       --content-paragraph-gap: 3px;
+      --message-line-height: 1.2;
       --content-block-gap: 8px;
     }
 
@@ -404,50 +405,38 @@ function getViewerHtml() {
       color: var(--userMessageText);
       padding: var(--line-height);
       border-radius: 4px;
+      font-size: 0;
     }
 
     .assistant-message {
       padding: var(--line-height);
       background: transparent;
+      font-size: 0;
     }
 
     .message-content {
-      white-space: pre-wrap;
       overflow-wrap: anywhere;
       line-height: var(--content-line-height);
+      font-size: 0px;
+    }
+
+    .message-text {
+      display: block;
+      white-space: pre-wrap;
+      margin: 0;
+      font-size: 12px;
+      line-height: var(--message-line-height);
     }
 
     .message-content p {
       margin: 0;
+      margin-block: 0;
+      line-height: var(--message-line-height);
+      font-size: 12px;
     }
 
     .message-content p + p {
       margin-top: var(--content-paragraph-gap);
-    }
-
-    .message-content h1,
-    .message-content h2,
-    .message-content h3,
-    .message-content h4,
-    .message-content h5,
-    .message-content h6 {
-      margin: var(--content-block-gap) 0 0 0;
-      font-size: 1em;
-      color: var(--borderAccent);
-      line-height: 1.25;
-    }
-
-    .message-content ul,
-    .message-content ol {
-      margin: var(--content-block-gap) 0;
-      padding-left: 18px;
-    }
-
-    .message-content code {
-      background: rgba(128, 128, 128, 0.2);
-      color: var(--text);
-      padding: 0 4px;
-      border-radius: 3px;
     }
 
     .thinking-text {
@@ -661,59 +650,25 @@ function getViewerHtml() {
         .replace(/'/g, '&#039;');
     }
 
-    function renderMarkdown(value) {
+    function renderMessageText(value) {
       const source = value == null ? '' : String(value);
       const escaped = escapeHtml(source);
       const lf = String.fromCharCode(10);
       const cr = String.fromCharCode(13);
-      const lines = escaped.replaceAll(cr + lf, lf).replaceAll(cr, lf).split(lf);
-      const html = [];
-      let inList = false;
+      const normalized = escaped.replaceAll(cr + lf, lf).replaceAll(cr, lf);
+      const paragraphBreak = lf + lf;
+      const paragraphs = normalized
+        .split(paragraphBreak)
+        .map((part) => part.trim())
+        .filter(Boolean);
 
-      function closeList() {
-        if (inList) {
-          html.push('</ul>');
-          inList = false;
-        }
+      if (paragraphs.length === 0) {
+        return '';
       }
 
-      function renderInline(text) {
-        return text
-          .replace(/\x60([^\x60]+)\x60/g, '<code>$1</code>')
-          .replace(/[*][*]([^*]+)[*][*]/g, '<strong>$1</strong>')
-          .replace(/[*]([^*]+)[*]/g, '<em>$1</em>');
-      }
-
-      for (const line of lines) {
-        const heading = line.match(/^(#{1,6}) +(.*)$/);
-        if (heading) {
-          closeList();
-          const level = heading[1].length;
-          html.push('<h' + String(level) + '>' + renderInline(heading[2]) + '</h' + String(level) + '>');
-          continue;
-        }
-
-        const listItem = line.match(/^ *[-*] +(.*)$/);
-        if (listItem) {
-          if (!inList) {
-            html.push('<ul>');
-            inList = true;
-          }
-          html.push('<li>' + renderInline(listItem[1]) + '</li>');
-          continue;
-        }
-
-        closeList();
-
-        if (line.trim() === '') {
-          html.push('');
-        } else {
-          html.push('<p>' + renderInline(line) + '</p>');
-        }
-      }
-
-      closeList();
-      return html.join(String.fromCharCode(10));
+      return paragraphs
+        .map((paragraph) => '<p>' + paragraph.replaceAll(lf, '<br>') + '</p>')
+        .join('');
     }
 
     function formatJson(str) {
@@ -894,25 +849,25 @@ function getViewerHtml() {
               if (part.type === 'thinking') {
                 contentHtml += \`<div class="thinking-text">\${escapeHtml(part.thinking || '')}</div>\`;
               } else if (part.type === 'text') {
-                contentHtml += renderMarkdown(part.text || '');
+                contentHtml += renderMessageText(part.text || '');
               }
             }
           } else {
-            contentHtml = renderMarkdown(String(content || ''));
+            contentHtml = renderMessageText(String(content || ''));
           }
 
           if (role === 'user') {
             html += \`
               <div class="user-message">
                 <div class="message-role user">User</div>
-                <div class="message-content">\${contentHtml}</div>
+                <div class="message-content"><div class="message-text">\${contentHtml}</div></div>
               </div>
             \`;
           } else if (role === 'assistant') {
             html += \`
               <div class="assistant-message">
                 <div class="message-role assistant">Assistant</div>
-                <div class="message-content">\${contentHtml}</div>
+                <div class="message-content"><div class="message-text">\${contentHtml}</div></div>
                 \${usage ? \`<div class="token-usage">Tokens: \${usage.input || usage.prompt_tokens || 0} in / \${usage.output || usage.completion_tokens || 0} out</div>\` : ''}
                 \${model ? \`<div class="token-usage">Model: \${escapeHtml(model)}</div>\` : ''}
               </div>
@@ -921,7 +876,7 @@ function getViewerHtml() {
             html += \`
               <div class="user-message" style="background: var(--customMessageBg);">
                 <div class="message-role system">System</div>
-                <div class="message-content">\${contentHtml}</div>
+                <div class="message-content"><div class="message-text">\${contentHtml}</div></div>
               </div>
             \`;
           }

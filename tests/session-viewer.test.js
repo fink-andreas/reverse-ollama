@@ -258,7 +258,7 @@ describe('session viewer server', () => {
     expect(html).toContain('Session Viewer');
     expect(html).toContain('.message-content');
     expect(html).toContain('white-space: pre-wrap');
-    expect(html).toContain('function renderMarkdown');
-    expect(html).toContain('.message-content h1');
+    expect(html).toContain('function renderMessageText');
+    expect(html).not.toContain('.message-content h1');
   });
 });
