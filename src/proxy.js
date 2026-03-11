@@ -2,6 +2,8 @@ import { Readable } from 'node:stream';
 import { request as undiciRequest } from 'undici';
 import { matchRequestCategory } from './matcher.js';
 import { applyActions } from './transform.js';
+import { appendSessionLogEntry, isSessionLogEnabled } from './session-log.js';
+import { buildPiSession } from './pi-session-format.js';
 
 const DEFAULT_UPSTREAM = 'http://127.0.0.1:11434';
 const HOP_BY_HOP_HEADERS = new Set([
@@ -144,6 +146,29 @@ function payloadPreviewFromBuffer(buffer, maxBytes) {
   };
 }
 
+function bufferToUtf8(buffer) {
+  if (!Buffer.isBuffer(buffer)) {
+    return null;
+  }
+
+  return buffer.toString('utf8');
+}
+
+function getRequestSource(req) {
+  const xForwardedFor = req.headers['x-forwarded-for'];
+  const xForwarded = req.headers['x-forwarded'];
+
+  const forwardedValue = Array.isArray(xForwardedFor)
+    ? xForwardedFor[0]
+    : xForwardedFor || (Array.isArray(xForwarded) ? xForwarded[0] : xForwarded);
+
+  if (forwardedValue) {
+    return String(forwardedValue).split(',')[0].trim();
+  }
+
+  return req.socket?.remoteAddress || 'unknown';
+}
+
 export async function proxyRequest({ req, res, logger, config }) {
   const upstreamBase = process.env.OLLAMA_UPSTREAM || DEFAULT_UPSTREAM;
   const upstreamUrl = new URL(req.url || '/', upstreamBase);
@@ -152,6 +177,9 @@ export async function proxyRequest({ req, res, logger, config }) {
 
   const abortController = new AbortController();
   const upstreamTimeoutMs = Number(process.env.UPSTREAM_TIMEOUT_MS || 60000);
+  const sessionLogEnabled = isSessionLogEnabled();
+  const requestSource = getRequestSource(req);
+  const requestStartMs = Date.now();
 
   const onRequestAborted = () => {
     abortController.abort('client request aborted');
@@ -166,15 +194,48 @@ export async function proxyRequest({ req, res, logger, config }) {
   req.on('aborted', onRequestAborted);
   res.on('close', onResponseClosed);
 
-  try {
-    let requestBodyStream = req;
-    let requestBodyObject = null;
-    let rawBodyText = '';
-    let matchedCategory = null;
-    let appliedActions = [];
-    const payloadLoggingEnabled = shouldLogPayloads(logger);
-    const payloadLogMaxBytes = payloadLoggingEnabled ? getPayloadLogMaxBytes() : 0;
+  let requestBodyStream = req;
+  let requestBodyObject = null;
+  let rawBodyText = '';
+  let matchedCategory = null;
+  let appliedActions = [];
+  let sessionIncomingRequestBuffer = null;
+  let sessionOutgoingRequestBuffer = null;
+  let sessionResponseBuffer = null;
+  let sessionStatusCode = null;
+  let sessionError = null;
+  let sessionSource = 'upstream';
+  const payloadLoggingEnabled = shouldLogPayloads(logger);
+  const payloadLogMaxBytes = payloadLoggingEnabled ? getPayloadLogMaxBytes() : 0;
 
+  const logSessionPair = async () => {
+    if (!sessionLogEnabled) {
+      return;
+    }
+
+    try {
+      const piSession = buildPiSession({
+        requestId: req.headers['x-request-id'] || null,
+        source: requestSource,
+        method: req.method,
+        path: req.url,
+        matchedCategory: matchedCategory?.name || null,
+        appliedActions,
+        incomingBody: bufferToUtf8(sessionIncomingRequestBuffer),
+        outgoingBody: bufferToUtf8(sessionOutgoingRequestBuffer),
+        responseBody: bufferToUtf8(sessionResponseBuffer),
+        statusCode: sessionStatusCode,
+        error: sessionError,
+        durationMs: Date.now() - requestStartMs,
+      });
+
+      await appendSessionLogEntry(piSession, { source: requestSource });
+    } catch (error) {
+      logger.warn({ err: error }, 'failed to write session log');
+    }
+  };
+
+  try {
     if (shouldInspectBody(req, categories)) {
       const rawBuffer = await readRequestBody(req);
       rawBodyText = rawBuffer.toString('utf8');
@@ -182,8 +243,15 @@ export async function proxyRequest({ req, res, logger, config }) {
       if (rawBodyText.trim().length > 0) {
         const parsed = safeJsonParse(rawBodyText);
         if (parsed.error) {
+          const responseBody = JSON.stringify({ error: 'Bad Request', message: 'Invalid JSON request body' });
+          sessionSource = 'proxy';
+          sessionStatusCode = 400;
+          sessionError = 'INVALID_JSON_REQUEST_BODY';
+          sessionResponseBuffer = Buffer.from(responseBody, 'utf8');
+
           res.writeHead(400, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Bad Request', message: 'Invalid JSON request body' }));
+          res.end(responseBody);
+          await logSessionPair();
           return;
         }
 
@@ -210,6 +278,11 @@ export async function proxyRequest({ req, res, logger, config }) {
       }
 
       requestBodyStream = outgoingBuffer;
+
+      if (sessionLogEnabled) {
+        sessionIncomingRequestBuffer = rawBuffer;
+        sessionOutgoingRequestBuffer = outgoingBuffer;
+      }
 
       logger.info(
         {
@@ -238,6 +311,14 @@ export async function proxyRequest({ req, res, logger, config }) {
           'request payload debug',
         );
       }
+    } else if (sessionLogEnabled) {
+      const method = (req.method || 'GET').toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD') {
+        const rawBuffer = await readRequestBody(req);
+        requestBodyStream = rawBuffer;
+        sessionIncomingRequestBuffer = rawBuffer;
+        sessionOutgoingRequestBuffer = rawBuffer;
+      }
     }
 
     const contentLength = Buffer.isBuffer(requestBodyStream) ? requestBodyStream.byteLength : undefined;
@@ -261,24 +342,35 @@ export async function proxyRequest({ req, res, logger, config }) {
     const upstreamResponse = await Promise.race([upstreamRequestPromise, timeoutPromise]);
     clearTimeout(timeout);
 
+    sessionStatusCode = upstreamResponse.statusCode;
+
     res.writeHead(upstreamResponse.statusCode, filterResponseHeaders(upstreamResponse.headers));
 
     const responseBody = toNodeReadable(upstreamResponse.body);
     if (!responseBody) {
+      sessionStatusCode = upstreamResponse.statusCode;
+      sessionResponseBuffer = Buffer.from('', 'utf8');
+      await logSessionPair();
       res.end();
       return;
     }
 
-    if (payloadLoggingEnabled) {
-      let responsePayloadBytes = 0;
-      let responsePreviewBytes = 0;
-      const responsePreviewChunks = [];
+    const responseCaptureEnabled = payloadLoggingEnabled || sessionLogEnabled;
+    let responsePayloadBytes = 0;
+    let responsePreviewBytes = 0;
+    const responsePreviewChunks = [];
+    const responseChunks = [];
 
+    if (responseCaptureEnabled) {
       responseBody.on('data', (chunk) => {
         const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         responsePayloadBytes += chunkBuffer.byteLength;
 
-        if (responsePreviewBytes >= payloadLogMaxBytes) {
+        if (sessionLogEnabled) {
+          responseChunks.push(chunkBuffer);
+        }
+
+        if (!payloadLoggingEnabled || responsePreviewBytes >= payloadLogMaxBytes) {
           return;
         }
 
@@ -289,8 +381,15 @@ export async function proxyRequest({ req, res, logger, config }) {
         responsePreviewChunks.push(previewChunk);
         responsePreviewBytes += previewChunk.byteLength;
       });
+    }
 
-      responseBody.on('end', () => {
+    responseBody.on('end', () => {
+      if (sessionLogEnabled) {
+        sessionResponseBuffer = Buffer.concat(responseChunks);
+        void logSessionPair();
+      }
+
+      if (payloadLoggingEnabled) {
         const responsePreview = Buffer.concat(responsePreviewChunks).toString('utf8');
 
         logger.debug(
@@ -304,10 +403,17 @@ export async function proxyRequest({ req, res, logger, config }) {
           },
           'response payload debug',
         );
-      });
-    }
+      }
+    });
 
     responseBody.on('error', (error) => {
+      sessionSource = 'upstream';
+      sessionError = error?.message || 'UPSTREAM_STREAM_ERROR';
+      if (sessionLogEnabled && !sessionResponseBuffer) {
+        sessionResponseBuffer = Buffer.concat(responseChunks);
+        void logSessionPair();
+      }
+
       logger.warn({ err: error }, 'upstream response stream error');
       if (!res.headersSent) {
         res.writeHead(502, { 'content-type': 'application/json' });
@@ -322,12 +428,19 @@ export async function proxyRequest({ req, res, logger, config }) {
     const reason = String(abortController.signal.reason || '');
     if (reason.includes('upstream timeout') || error?.message === 'UPSTREAM_TIMEOUT') {
       logger.warn({ reason }, 'upstream timed out');
+      const responseBody = JSON.stringify({ error: 'Gateway Timeout', message: 'Upstream request timed out' });
+      sessionSource = 'proxy';
+      sessionStatusCode = 504;
+      sessionError = 'UPSTREAM_TIMEOUT';
+      sessionResponseBuffer = Buffer.from(responseBody, 'utf8');
+
       if (!res.headersSent) {
         res.writeHead(504, { 'content-type': 'application/json' });
       }
       if (!res.writableEnded) {
-        res.end(JSON.stringify({ error: 'Gateway Timeout', message: 'Upstream request timed out' }));
+        res.end(responseBody);
       }
+      await logSessionPair();
       return;
     }
 
@@ -337,12 +450,19 @@ export async function proxyRequest({ req, res, logger, config }) {
     }
 
     logger.error({ err: error }, 'proxy request failed');
+    const responseBody = JSON.stringify({ error: 'Bad Gateway', message: 'Failed to reach upstream Ollama' });
+    sessionSource = 'proxy';
+    sessionStatusCode = 502;
+    sessionError = error?.message || 'PROXY_REQUEST_FAILED';
+    sessionResponseBuffer = Buffer.from(responseBody, 'utf8');
+
     if (!res.headersSent) {
       res.writeHead(502, { 'content-type': 'application/json' });
     }
     if (!res.writableEnded) {
-      res.end(JSON.stringify({ error: 'Bad Gateway', message: 'Failed to reach upstream Ollama' }));
+      res.end(responseBody);
     }
+    await logSessionPair();
   } finally {
     req.off('aborted', onRequestAborted);
     res.off('close', onResponseClosed);

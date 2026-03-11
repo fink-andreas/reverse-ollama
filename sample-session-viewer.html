@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reverse-Ollama Session Export</title>
+  <style>
+    :root {
+      --accent: #8abeb7;
+      --border: #5f87ff;
+      --borderAccent: #00d7ff;
+      --borderMuted: #505050;
+      --success: #b5bd68;
+      --error: #cc6666;
+      --warning: #f0c674;
+      --muted: #808080;
+      --dim: #666666;
+      --text: #e5e5e7;
+      --thinkingText: #808080;
+      --selectedBg: #3a3a4a;
+      --userMessageBg: #343541;
+      --userMessageText: #e5e5e7;
+      --customMessageBg: #2d2838;
+      --customMessageText: #e5e5e7;
+      --customMessageLabel: #9575cd;
+      --toolPendingBg: #282832;
+      --toolSuccessBg: #283228;
+      --toolErrorBg: #3c2828;
+      --toolTitle: #e5e5e7;
+      --toolOutput: #808080;
+      --mdHeading: #f0c674;
+      --mdLink: #81a2be;
+      --mdCode: #8abeb7;
+      --mdCodeBlock: #b5bd68;
+      --mdCodeBlockBorder: #808080;
+      --mdQuote: #808080;
+      --mdQuoteBorder: #808080;
+      --mdHr: #808080;
+      --mdListBullet: #8abeb7;
+      --body-bg: rgb(36, 37, 46);
+      --container-bg: rgb(44, 45, 55);
+      --info-bg: rgb(72, 68, 65);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --line-height: 18px;
+      --content-line-height: 1.35;
+      --content-paragraph-gap: 3px;
+      --content-block-gap: 8px;
+    }
+
+    body {
+      font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+      font-size: 12px;
+      line-height: var(--content-line-height);
+      color: var(--text);
+      background: var(--body-bg);
+    }
+
+    #app {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    #sidebar {
+      width: 400px;
+      background: var(--container-bg);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      border-right: 1px solid var(--dim);
+    }
+
+    .sidebar-header {
+      padding: 8px 12px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-controls {
+      padding: 8px 8px 4px 8px;
+    }
+
+    .sidebar-search {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-family: inherit;
+      background: var(--body-bg);
+      color: var(--text);
+      border: 1px solid var(--dim);
+      border-radius: 3px;
+    }
+
+    .sidebar-search:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .sidebar-search::placeholder {
+      color: var(--muted);
+    }
+
+    .tree-container {
+      flex: 1;
+      overflow: auto;
+      padding: 4px 0;
+    }
+
+    .tree-node {
+      padding: 0 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: baseline;
+      font-size: 11px;
+      line-height: 13px;
+      white-space: nowrap;
+    }
+
+    .tree-node:hover {
+      background: var(--selectedBg);
+    }
+
+    .tree-node.active {
+      background: var(--selectedBg);
+    }
+
+    .tree-node.active .tree-content {
+      font-weight: bold;
+    }
+
+    .tree-prefix {
+      color: var(--muted);
+      flex-shrink: 0;
+      font-family: monospace;
+      white-space: pre;
+    }
+
+    .tree-marker {
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .tree-content {
+      color: var(--text);
+    }
+
+    .tree-role-user {
+      color: var(--accent);
+    }
+
+    .tree-role-assistant {
+      color: var(--success);
+    }
+
+    .tree-muted {
+      color: var(--muted);
+    }
+
+    .tree-error {
+      color: var(--error);
+    }
+
+    .tree-model {
+      color: var(--borderAccent);
+    }
+
+    .tree-proxy {
+      color: var(--customMessageLabel);
+    }
+
+    .tree-status {
+      padding: 4px 12px;
+      font-size: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    /* Main content */
+    #content {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--line-height) calc(var(--line-height) * 2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #content > * {
+      width: 100%;
+      max-width: 900px;
+    }
+
+    /* Help bar */
+    .help-bar {
+      font-size: 11px;
+      color: var(--warning);
+      margin-bottom: var(--line-height);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .file-input-label {
+      font-size: 10px;
+      padding: 2px 8px;
+      background: var(--container-bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .file-input-label:hover {
+      background: var(--selectedBg);
+      border-color: var(--borderAccent);
+    }
+
+    #file-input {
+      display: none;
+    }
+
+    /* Header */
+    .header {
+      background: var(--container-bg);
+      border-radius: 4px;
+      padding: var(--line-height);
+      margin-bottom: var(--line-height);
+    }
+
+    .header h1 {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--borderAccent);
+      margin-bottom: var(--line-height);
+    }
+
+    .header-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      font-size: 11px;
+    }
+
+    .info-item {
+      color: var(--dim);
+      display: flex;
+      align-items: baseline;
+    }
+
+    .info-label {
+      font-weight: 600;
+      margin-right: 8px;
+      min-width: 100px;
+    }
+
+    .info-value {
+      color: var(--text);
+      flex: 1;
+      word-break: break-all;
+    }
+
+    /* Messages */
+    #messages {
+      display: flex;
+      flex-direction: column;
+      gap: var(--line-height);
+    }
+
+    .message-timestamp {
+      font-size: 10px;
+      color: var(--dim);
+      opacity: 0.8;
+    }
+
+    .user-message {
+      background: var(--userMessageBg);
+      color: var(--userMessageText);
+      padding: var(--line-height);
+      border-radius: 4px;
+      position: relative;
+    }
+
+    .assistant-message {
+      padding: 0;
+      position: relative;
+    }
+
+    .assistant-text {
+      padding: var(--line-height);
+      padding-bottom: 0;
+    }
+
+    .thinking-text {
+      padding: var(--line-height);
+      color: var(--thinkingText);
+      font-style: italic;
+      white-space: pre-wrap;
+    }
+
+    /* Proxy metadata block */
+    .proxy-block {
+      background: var(--customMessageBg);
+      border-radius: 4px;
+      padding: var(--line-height);
+      margin-top: var(--line-height);
+    }
+
+    .proxy-block-header {
+      font-weight: bold;
+      color: var(--customMessageLabel);
+      margin-bottom: var(--line-height);
+    }
+
+    .proxy-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 8px;
+    }
+
+    .proxy-item {
+      font-size: 11px;
+    }
+
+    .proxy-item-label {
+      color: var(--dim);
+      font-size: 10px;
+    }
+
+    .proxy-item-value {
+      color: var(--text);
+    }
+
+    .proxy-item-value.success {
+      color: var(--success);
+    }
+
+    .proxy-item-value.error {
+      color: var(--error);
+    }
+
+    .proxy-item-value.warning {
+      color: var(--warning);
+    }
+
+    /* Code blocks for bodies */
+    .body-block {
+      margin-top: var(--line-height);
+    }
+
+    .body-block-header {
+      font-weight: bold;
+      color: var(--warning);
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .body-block pre {
+      background: var(--body-bg);
+      padding: 8px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 10px;
+      line-height: 14px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .body-block code {
+      font-family: inherit;
+      color: var(--text);
+    }
+
+    /* Model change */
+    .model-change {
+      padding: 0 var(--line-height);
+      color: var(--dim);
+      font-size: 11px;
+      margin-bottom: var(--line-height);
+    }
+
+    .model-name {
+      color: var(--borderAccent);
+      font-weight: bold;
+    }
+
+    /* Error block */
+    .error-block {
+      background: var(--toolErrorBg);
+      padding: var(--line-height);
+      border-radius: 4px;
+      border-left: 3px solid var(--error);
+    }
+
+    .error-block-header {
+      font-weight: bold;
+      color: var(--error);
+    }
+
+    .error-block-message {
+      color: var(--text);
+      margin-top: 4px;
+    }
+
+    /* Markdown content */
+    .markdown-content {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      line-height: var(--content-line-height);
+    }
+
+    .markdown-content h1,
+    .markdown-content h2,
+    .markdown-content h3,
+    .markdown-content h4,
+    .markdown-content h5,
+    .markdown-content h6 {
+      color: var(--mdHeading);
+      margin: var(--content-block-gap) 0 0 0;
+      font-weight: bold;
+      line-height: 1.25;
+    }
+
+    .markdown-content h1 { font-size: 1em; }
+    .markdown-content h2 { font-size: 1em; }
+    .markdown-content h3 { font-size: 1em; }
+
+    .markdown-content p { margin: 0; }
+    .markdown-content p + p { margin-top: var(--content-paragraph-gap); }
+
+    .markdown-content code {
+      background: rgba(128, 128, 128, 0.2);
+      color: var(--mdCode);
+      padding: 0 4px;
+      border-radius: 3px;
+      font-family: inherit;
+    }
+
+    .markdown-content pre {
+      background: transparent;
+      margin: var(--content-block-gap) 0;
+      overflow-x: auto;
+    }
+
+    .markdown-content pre code {
+      display: block;
+      background: none;
+      color: var(--text);
+    }
+
+    .markdown-content blockquote {
+      border-left: 3px solid var(--mdQuoteBorder);
+      padding-left: 12px;
+      margin: var(--content-block-gap) 0;
+      color: var(--mdQuote);
+      font-style: italic;
+    }
+
+    .markdown-content ul,
+    .markdown-content ol {
+      margin: var(--content-block-gap) 0;
+      padding-left: 18px;
+    }
+
+    .markdown-content li { margin: 0; }
+    .markdown-content li::marker { color: var(--mdListBullet); }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 48px;
+      color: var(--muted);
+    }
+
+    .empty-state h2 {
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 48px;
+      padding: 20px;
+      text-align: center;
+      color: var(--dim);
+      font-size: 10px;
+    }
+
+    /* Mobile */
+    #hamburger {
+      display: none;
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-family: inherit;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--dim);
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    #hamburger:hover {
+      color: var(--text);
+      border-color: var(--text);
+    }
+
+    #sidebar-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 98;
+    }
+
+    @media (max-width: 900px) {
+      #sidebar {
+        position: fixed;
+        left: -400px;
+        width: 400px;
+        top: 0;
+        bottom: 0;
+        height: 100vh;
+        z-index: 99;
+        transition: left 0.3s;
+      }
+
+      #sidebar.open {
+        left: 0;
+      }
+
+      #sidebar-overlay.open {
+        display: block;
+      }
+
+      #hamburger {
+        display: block;
+      }
+
+      #content {
+        padding: var(--line-height) 16px;
+      }
+
+      #content > * {
+        max-width: 100%;
+      }
+    }
+
+    @media print {
+      #sidebar, #hamburger, #sidebar-overlay { display: none !important; }
+      body { background: white; color: black; }
+      #content { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <button id="hamburger" title="Open sidebar">☰</button>
+  <div id="sidebar-overlay"></div>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-controls">
+          <input type="text" class="sidebar-search" id="tree-search" placeholder="Search...">
+        </div>
+      </div>
+      <div class="tree-container" id="tree-container"></div>
+      <div class="tree-status" id="tree-status"></div>
+    </aside>
+    <main id="content">
+      <div id="header-container"></div>
+      <div id="messages"></div>
+    </main>
+  </div>
+
+  <script>
+    // State
+    let sessions = [];
+    let activeSessionIndex = 0;
+    let activeEntryId = null;
+
+    // DOM elements
+    const treeContainer = document.getElementById('tree-container');
+    const treeStatus = document.getElementById('tree-status');
+    const headerContainer = document.getElementById('header-container');
+    const messagesContainer = document.getElementById('messages');
+    const searchInput = document.getElementById('tree-search');
+    const hamburger = document.getElementById('hamburger');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+    // File input handling
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'file-input';
+    fileInput.accept = '.jsonl,.json';
+    fileInput.multiple = true;
+
+    fileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      loadFiles(files);
+    });
+
+    // Event listeners
+    hamburger.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      sidebarOverlay.classList.toggle('open');
+    });
+
+    sidebarOverlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      sidebarOverlay.classList.remove('open');
+    });
+
+    searchInput.addEventListener('input', (e) => {
+      renderTree(e.target.value);
+    });
+
+    // Load files
+    async function loadFiles(files) {
+      sessions = [];
+
+      for (const file of files) {
+        const text = await file.text();
+
+        // Try parsing as JSONL (multiple sessions)
+        const lines = text.trim().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const session = JSON.parse(line);
+              sessions.push(session);
+            } catch (err) {
+              console.warn('Failed to parse line:', err);
+            }
+          }
+        }
+      }
+
+      if (sessions.length > 0) {
+        activeSessionIndex = 0;
+        render();
+      }
+    }
+
+    // Render functions
+    function render() {
+      renderTree(searchInput.value);
+      renderHeader();
+      renderMessages();
+      updateStatus();
+    }
+
+    function renderTree(filter = '') {
+      const filterLower = filter.toLowerCase();
+
+      let html = '';
+
+      sessions.forEach((session, sessionIndex) => {
+        const isActive = sessionIndex === activeSessionIndex;
+
+        // Session header
+        const sessionTime = session.header?.timestamp || session._proxy?.timestamp || 'Unknown';
+        const sessionSource = session._proxy?.source || 'unknown';
+        const sessionPath = session._proxy?.path || session.header?.cwd || '';
+
+        html += `<div class="tree-node ${isActive ? 'active' : ''}" data-session="${sessionIndex}">
+          <span class="tree-prefix"></span>
+          <span class="tree-marker">${isActive ? '●' : '○'}</span>
+          <span class="tree-content tree-proxy">
+            Session ${sessionIndex + 1} - ${escapeHtml(sessionSource)}
+          </span>
+        </div>`;
+
+        if (isActive) {
+          // Entries
+          session.entries?.forEach((entry, entryIndex) => {
+            const entryText = getEntryTreeText(entry);
+            const matchesFilter = !filter || entryText.toLowerCase().includes(filterLower);
+
+            if (matchesFilter) {
+              const entryClass = entry.type === 'message'
+                ? (entry.message?.role === 'user' ? 'tree-role-user' : 'tree-role-assistant')
+                : entry.type === 'error' ? 'tree-error'
+                : entry.type === 'model_change' ? 'tree-model'
+                : '';
+
+              html += `<div class="tree-node ${activeEntryId === entry.id ? 'active' : ''}"
+                          data-entry="${entry.id}"
+                          data-session="${sessionIndex}">
+                <span class="tree-prefix">  </span>
+                <span class="tree-marker">├</span>
+                <span class="tree-content ${entryClass}">${escapeHtml(entryText)}</span>
+              </div>`;
+            }
+          });
+        }
+      });
+
+      if (sessions.length === 0) {
+        html = `<div class="empty-state" style="padding: 20px; text-align: left;">
+          <p>No sessions loaded.</p>
+          <p style="margin-top: 8px;">
+            <label class="file-input-label" style="display: inline-block; padding: 4px 12px;">
+              Load session file...
+              <input type="file" id="file-input-trigger" accept=".jsonl,.json" multiple style="display: none;">
+            </label>
+          </p>
+        </div>`;
+      }
+
+      treeContainer.innerHTML = html;
+
+      // Add click handlers
+      treeContainer.querySelectorAll('.tree-node').forEach(node => {
+        node.addEventListener('click', () => {
+          const sessionIdx = node.dataset.session;
+          const entryId = node.dataset.entry;
+
+          if (entryId) {
+            activeEntryId = entryId;
+            // Scroll to entry
+            const el = document.getElementById(`entry-${entryId}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } else {
+            activeSessionIndex = parseInt(sessionIdx);
+            activeEntryId = null;
+          }
+
+          render();
+        });
+      });
+
+      // Handle file input in empty state
+      const fileInputTrigger = document.getElementById('file-input-trigger');
+      if (fileInputTrigger) {
+        fileInputTrigger.addEventListener('change', (e) => {
+          loadFiles(Array.from(e.target.files));
+        });
+      }
+    }
+
+    function getEntryTreeText(entry) {
+      switch (entry.type) {
+        case 'model_change':
+          return `Model: ${entry.modelId || 'unknown'}`;
+        case 'message':
+          const role = entry.message?.role || 'unknown';
+          const content = entry.message?.content;
+          let preview = '';
+          if (Array.isArray(content)) {
+            const textPart = content.find(c => c.type === 'text');
+            preview = textPart?.text || '';
+          } else {
+            preview = String(content || '');
+          }
+          const truncated = preview.length > 40 ? preview.slice(0, 40) + '...' : preview;
+          return `${role}: ${truncated}`;
+        case 'error':
+          return `Error: ${entry.error?.message || 'unknown'}`;
+        default:
+          return entry.type || 'unknown';
+      }
+    }
+
+    function renderHeader() {
+      if (sessions.length === 0) {
+        headerContainer.innerHTML = `
+          <div class="help-bar">
+            <label class="file-input-label">
+              Load session file...
+            </label>
+            <input type="file" id="header-file-input" accept=".jsonl,.json" multiple style="display: none;">
+          </div>
+          <div class="header">
+            <h1>Reverse-Ollama Session Viewer</h1>
+            <p style="color: var(--muted);">Load a session JSONL file to view request/response pairs in pi-compatible format.</p>
+          </div>
+        `;
+
+        const headerFileInput = document.getElementById('header-file-input');
+        if (headerFileInput) {
+          headerFileInput.addEventListener('change', (e) => {
+            loadFiles(Array.from(e.target.files));
+          });
+        }
+
+        // Also trigger on label click
+        const label = headerContainer.querySelector('.file-input-label');
+        if (label) {
+          label.addEventListener('click', () => {
+            const input = document.getElementById('header-file-input');
+            input.click();
+          });
+        }
+
+        return;
+      }
+
+      const session = sessions[activeSessionIndex];
+      const proxy = session._proxy || {};
+      const header = session.header || {};
+
+      headerContainer.innerHTML = `
+        <div class="help-bar">
+          <span>${sessions.length} session(s) loaded</span>
+          <label class="file-input-label">
+            Load more...
+          </label>
+          <input type="file" id="header-file-input" accept=".jsonl,.json" multiple style="display: none;">
+          ${sessions.length > 1 ? `
+            <button onclick="prevSession()" style="margin-left: auto; padding: 2px 8px; background: var(--container-bg); border: 1px solid var(--dim); border-radius: 3px; color: var(--text); cursor: pointer; font-family: inherit; font-size: 10px;">← Prev</button>
+            <span style="font-size: 10px; color: var(--muted);">${activeSessionIndex + 1}/${sessions.length}</span>
+            <button onclick="nextSession()" style="padding: 2px 8px; background: var(--container-bg); border: 1px solid var(--dim); border-radius: 3px; color: var(--text); cursor: pointer; font-family: inherit; font-size: 10px;">Next →</button>
+          ` : ''}
+        </div>
+        <div class="header">
+          <h1>Session ${activeSessionIndex + 1}</h1>
+          <div class="header-info">
+            <div class="info-item">
+              <span class="info-label">ID:</span>
+              <span class="info-value">${escapeHtml(header.id || 'unknown')}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Timestamp:</span>
+              <span class="info-value">${escapeHtml(header.timestamp || proxy.timestamp || 'unknown')}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Source:</span>
+              <span class="info-value">${escapeHtml(proxy.source || 'unknown')}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Path:</span>
+              <span class="info-value">${escapeHtml(proxy.method || '')} ${escapeHtml(proxy.path || 'unknown')}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Category:</span>
+              <span class="info-value">${escapeHtml(proxy.matchedCategory || 'none')}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Actions:</span>
+              <span class="info-value">${(proxy.appliedActions || []).map(a => escapeHtml(a)).join(', ') || 'none'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Status:</span>
+              <span class="info-value ${proxy.statusCode >= 400 ? 'error' : proxy.statusCode >= 300 ? 'warning' : 'success'}">${proxy.statusCode || 'unknown'}</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const headerFileInput = document.getElementById('header-file-input');
+      if (headerFileInput) {
+        const label = headerContainer.querySelector('.file-input-label');
+        label.addEventListener('click', () => headerFileInput.click());
+        headerFileInput.addEventListener('change', (e) => {
+          loadFiles(Array.from(e.target.files));
+        });
+      }
+    }
+
+    function renderMessages() {
+      if (sessions.length === 0) {
+        messagesContainer.innerHTML = '';
+        return;
+      }
+
+      const session = sessions[activeSessionIndex];
+      const proxy = session._proxy || {};
+
+      let html = '';
+
+      // Render entries
+      session.entries?.forEach((entry) => {
+        if (entry.type === 'model_change') {
+          html += `
+            <div class="model-change" id="entry-${entry.id}">
+              Model changed to: <span class="model-name">${escapeHtml(entry.modelId || 'unknown')}</span>
+            </div>
+          `;
+        } else if (entry.type === 'message') {
+          const role = entry.message?.role;
+          const content = entry.message?.content;
+          const usage = entry.message?.usage;
+          const model = entry.message?.model;
+
+          let contentHtml = '';
+          if (Array.isArray(content)) {
+            content.forEach(part => {
+              if (part.type === 'text') {
+                contentHtml += `<div class="markdown-content">${escapeHtml(part.text || '')}</div>`;
+              } else if (part.type === 'thinking') {
+                contentHtml += `<div class="thinking-text">${escapeHtml(part.thinking || '')}</div>`;
+              }
+            });
+          } else {
+            contentHtml = `<div class="markdown-content">${escapeHtml(String(content || ''))}</div>`;
+          }
+
+          if (role === 'user') {
+            html += `
+              <div class="user-message" id="entry-${entry.id}">
+                ${contentHtml}
+              </div>
+            `;
+          } else if (role === 'assistant') {
+            html += `
+              <div class="assistant-message" id="entry-${entry.id}">
+                <div class="assistant-text">
+                  ${contentHtml}
+                </div>
+                ${usage ? `
+                  <div style="padding: 0 var(--line-height); font-size: 10px; color: var(--dim); margin-top: 4px;">
+                    Tokens: ${usage.input || usage.prompt_tokens || 0} in / ${usage.output || usage.completion_tokens || 0} out
+                    ${usage.totalTokens ? `(${usage.totalTokens} total)` : ''}
+                  </div>
+                ` : ''}
+                ${model ? `
+                  <div style="padding: 0 var(--line-height); font-size: 10px; color: var(--dim);">
+                    Model: ${escapeHtml(model)}
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }
+        } else if (entry.type === 'error') {
+          html += `
+            <div class="error-block" id="entry-${entry.id}">
+              <div class="error-block-header">Error</div>
+              <div class="error-block-message">${escapeHtml(entry.error?.message || 'Unknown error')}</div>
+              ${entry.error?.statusCode ? `<div style="font-size: 10px; color: var(--muted); margin-top: 4px;">Status: ${entry.error.statusCode}</div>` : ''}
+            </div>
+          `;
+        }
+      });
+
+      // Proxy metadata with raw bodies
+      if (proxy.request || proxy.response) {
+        html += `
+          <div class="proxy-block">
+            <div class="proxy-block-header">Request/Response Details</div>
+
+            ${proxy.request?.incomingBody ? `
+              <div class="body-block">
+                <div class="body-block-header">Incoming Request Body</div>
+                <pre><code>${escapeHtml(formatJson(proxy.request.incomingBody))}</code></pre>
+              </div>
+            ` : ''}
+
+            ${proxy.request?.outgoingBody ? `
+              <div class="body-block">
+                <div class="body-block-header">Outgoing Request Body (transformed)</div>
+                <pre><code>${escapeHtml(formatJson(proxy.request.outgoingBody))}</code></pre>
+              </div>
+            ` : ''}
+
+            ${proxy.response?.body ? `
+              <div class="body-block">
+                <div class="body-block-header">Response Body</div>
+                <pre><code>${escapeHtml(formatJson(proxy.response.body))}</code></pre>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      // Footer
+      html += `
+        <div class="footer">
+          Reverse-Ollama Session Viewer | Session ID: ${escapeHtml(session.header?.id || 'unknown')}
+        </div>
+      `;
+
+      messagesContainer.innerHTML = html;
+    }
+
+    function updateStatus() {
+      const session = sessions[activeSessionIndex];
+      const entryCount = session?.entries?.length || 0;
+      treeStatus.textContent = `${sessions.length} session(s) • ${entryCount} entries`;
+    }
+
+    function prevSession() {
+      if (activeSessionIndex > 0) {
+        activeSessionIndex--;
+        activeEntryId = null;
+        render();
+      }
+    }
+
+    function nextSession() {
+      if (activeSessionIndex < sessions.length - 1) {
+        activeSessionIndex++;
+        activeEntryId = null;
+        render();
+      }
+    }
+
+    // Make prev/next available globally
+    window.prevSession = prevSession;
+    window.nextSession = nextSession;
+
+    // Utilities
+    function escapeHtml(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function formatJson(str) {
+      try {
+        const obj = typeof str === 'string' ? JSON.parse(str) : str;
+        return JSON.stringify(obj, null, 2);
+      } catch {
+        return String(str);
+      }
+    }
+
+    // Initial render
+    render();
+  </script>
+  <script id='session-data' type='application/json'>
+    {"header":{"type":"session","version":3,"id":"7ab17495-73d0-4833-9e7d-1614ef532e8a","timestamp":"2026-03-10T08:59:57.526Z","cwd":"/home/afi/dvl/reverse-ollama"},"entries":[{"type":"model_change","id":"034613c9","parentId":null,"timestamp":"2026-03-10T08:59:57.526Z","modelId":"qwen3.5:27b"},{"type":"message","id":"2a4650a7","parentId":"034613c9","timestamp":"2026-03-10T08:59:57.526Z","message":{"role":"system","content":[{"type":"text","text":"You are a helpful assistant."}],"timestamp":1773133197527}},{"type":"message","id":"ffc2d4f4","parentId":"2a4650a7","timestamp":"2026-03-10T08:59:57.526Z","message":{"role":"user","content":[{"type":"text","text":"What is the capital of France?"}],"timestamp":1773133197527}},{"type":"message","id":"5825b09a","parentId":"ffc2d4f4","timestamp":"2026-03-10T08:59:57.526Z","message":{"role":"assistant","content":[{"type":"text","text":"The capital of France is **Paris**."}],"timestamp":1773133197527,"model":"qwen3.5:27b","usage":{"prompt_tokens":25,"completion_tokens":8,"total_tokens":33},"stopReason":"stop"}}],"leafId":"5825b09a","_proxy":{"requestId":"4bdc3ac5-e798-4457-9be6-55848623b386","source":"46.232.228.35","method":"POST","path":"/v1/chat/completions","matchedCategory":"rewrite-gpt-oss-or-deepseek-to-qwen35-27b","appliedActions":["replace:model","set:options.num_ctx"],"statusCode":200,"timestamp":"2026-03-10T08:59:57.526Z","request":{"incomingBody":"{\"model\":\"deepseek-r1_70b_q4_K_M_ctx_65000:latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a helpful assistant.\"},{\"role\":\"user\",\"content\":\"What is the capital of France?\"}],\"options\":{\"num_ctx\":65000}}","outgoingBody":"{\"model\":\"qwen3.5:27b\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a helpful assistant.\"},{\"role\":\"user\",\"content\":\"What is the capital of France?\"}],\"options\":{\"num_ctx\":65000}}"},"response":{"body":"{\"id\":\"chatcmpl-557\",\"object\":\"chat.completion\",\"model\":\"qwen3.5:27b\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"The capital of France is **Paris**.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":25,\"completion_tokens\":8,\"total_tokens\":33}}"}}}
+    {"header":{"type":"session","version":3,"id":"36723e54-457f-4cab-80aa-67589c4af449","timestamp":"2026-03-10T08:59:57.527Z","cwd":"/home/afi/dvl/reverse-ollama"},"entries":[{"type":"model_change","id":"2da8b4ef","parentId":null,"timestamp":"2026-03-10T08:59:57.527Z","modelId":"llama3:latest"},{"type":"message","id":"88ed33e8","parentId":"2da8b4ef","timestamp":"2026-03-10T08:59:57.527Z","message":{"role":"user","content":[{"type":"text","text":"Hello!"}],"timestamp":1773133197527}},{"type":"error","id":"c148a274","parentId":"88ed33e8","timestamp":"2026-03-10T08:59:57.527Z","error":{"message":"UPSTREAM_TIMEOUT","statusCode":502}}],"leafId":"c148a274","_proxy":{"requestId":"7f8e9d0c-1a2b-4c3d-5e6f-7a8b9c0d1e2f","source":"192.168.1.100","method":"POST","path":"/api/chat","matchedCategory":null,"appliedActions":[],"statusCode":502,"timestamp":"2026-03-10T08:59:57.527Z","request":{"incomingBody":"{\"model\":\"llama3:latest\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello!\"}]}","outgoingBody":"{\"model\":\"llama3:latest\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello!\"}]}"},"response":{"body":""}}}
+    {"header":{"type":"session","version":3,"id":"943c6c41-f32c-48ec-b4fa-a157261301b8","timestamp":"2026-03-10T08:59:57.527Z","cwd":"/home/afi/dvl/reverse-ollama"},"entries":[{"type":"model_change","id":"1bd8c892","parentId":null,"timestamp":"2026-03-10T08:59:57.527Z","modelId":"codellama:34b"},{"type":"message","id":"07992e1f","parentId":"1bd8c892","timestamp":"2026-03-10T08:59:57.527Z","message":{"role":"user","content":[{"type":"text","text":"Write a Python function to calculate fibonacci"}],"timestamp":1773133197527}},{"type":"message","id":"b01d9a6d","parentId":"07992e1f","timestamp":"2026-03-10T08:59:57.527Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"The user wants a fibonacci function. I should provide an efficient iterative implementation."},{"type":"text","text":"Here is an efficient iterative implementation of the Fibonacci sequence:\n\n```python\ndef fibonacci(n):\n    if n <= 1:\n        return n\n    a, b = 0, 1\n    for _ in range(2, n + 1):\n        a, b = b, a + b\n    return b\n```"}],"timestamp":1773133197527,"model":"codellama:34b","usage":{"prompt_tokens":15,"completion_tokens":85,"total_tokens":100},"stopReason":"stop"}}],"leafId":"b01d9a6d","_proxy":{"requestId":"abc123-def456","source":"10.0.0.50","method":"POST","path":"/v1/chat/completions","matchedCategory":"rewrite-to-codellama","appliedActions":["replace:model"],"statusCode":200,"timestamp":"2026-03-10T08:59:57.527Z","request":{"incomingBody":"{\"model\":\"gpt-4\",\"messages\":[{\"role\":\"user\",\"content\":\"Write a Python function to calculate fibonacci\"}]}","outgoingBody":"{\"model\":\"codellama:34b\",\"messages\":[{\"role\":\"user\",\"content\":\"Write a Python function to calculate fibonacci\"}]}"},"response":{"body":"{\"id\":\"chatcmpl-789\",\"object\":\"chat.completion\",\"model\":\"codellama:34b\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"reasoning_content\":\"The user wants a fibonacci function. I should provide an efficient iterative implementation.\",\"content\":\"Here is an efficient iterative implementation of the Fibonacci sequence:\\n\\n```python\\ndef fibonacci(n):\\n    if n <= 1:\\n        return n\\n    a, b = 0, 1\\n    for _ in range(2, n + 1):\\n        a, b = b, a + b\\n    return b\\n```\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":85,\"total_tokens\":100}}"}}}
+  </script>
+  <script>
+    // Auto-load embedded sessions
+    const dataEl = document.getElementById('session-data');
+    if (dataEl) {
+      const text = dataEl.textContent.trim();
+      const lines = text.split('\n').filter(l => l.trim());
+      sessions = lines.map(l => JSON.parse(l));
+      if (sessions.length > 0) {
+        activeSessionIndex = 0;
+        render();
+      }
+    }
+  </script>
+</body>
+</html>

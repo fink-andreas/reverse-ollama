@@ -35,9 +35,36 @@ Environment variables:
 - `OLLAMA_UPSTREAM` (default `http://127.0.0.1:11434`)
 - `REVERSE_OLLAMA_CONFIG` (default `config/categories.json`)
 - `UPSTREAM_TIMEOUT_MS` (default `60000`)
-- `LOG_LEVEL` (default `info`)
-- `LOG_PAYLOADS` (default `false`; request/response payload logging requires `LOG_LEVEL=debug` or `trace`)
-- `LOG_PAYLOAD_MAX_BYTES` (default `4096`; truncation limit for request/response payload debug logs)
+## Session Viewer Web Server
+
+A web UI for viewing session logs.
+
+- Listens on host/port configurable via `SESSION_VIEWER_HOST` (default: `127.0.0.1`) and `SESSION_VIEWER_PORT` (default: `3000`)
+- Set `SESSION_VIEWER_HOST=0.0.0.0` to expose it on all interfaces
+- Basic auth protection via `SESSION_VIEWER_PASSWORD` (username: `admin`) — required; server exits if unset
+- Shows session list on first screen with ability to click on a specific session
+- Session list includes `Tokens` (in/out) and `Time` (request→response duration)
+- Shows session details with back button to session list
+
+- Pi-compatible session format (tree structure with entries)
+- `src/pi-session-format.js` - Transforms request/response to to pi format
+- `src/session-viewer-server.js` - Web server for viewing sessions
+- `src/session-viewer.html` - Standalone HTML viewer
+- `sample-session-viewer.html` - Demo HTML with sample sessions
+
+- `tests/session-viewer.test.js` - Integration tests for session viewer server
+
+### Session logs
+When `SESSION_LOG_ENABLED=true`, the proxy appends JSONL entries with full request/response pairs to:
+- `/var/log/reverse-ollama/sessions/session-YYYY-MM-DD-HH-mm-ss-SSS-<source>.jsonl` (default, UTC timestamp)
+- or `SESSION_LOG_DIR` override
+
+`<source>` is resolved from request source in this order:
+1. `x-forwarded-for` (first IP)
+2. `x-forwarded`
+3. socket remote address
+
+Each line includes request metadata (including `source`), matched category/actions, incoming/outgoing request bodies, and response status/body.
 
 ## Configuration
 Default config path: `config/categories.json`
@@ -86,7 +113,10 @@ Matching behavior:
 - first matching category is used
 - if no regex fields are defined, endpoint-only matching is used
 
-## Architecture
+- `src/logger.js`: structured logger setup
+- `src/session-log.js`: session log utilities (directory, filename sanitization)
+- `src/pi-session-format.js`: pi-compatible session format transformation
+- `src/session-viewer-server.js`: session viewer web server
 - `src/server.js`: HTTP server lifecycle, config load/reload, graceful shutdown
 - `src/proxy.js`: upstream forwarding, streaming, request classification + mutation pipeline
 - `src/config.js`: config load, schema validation, regex compilation
@@ -171,6 +201,36 @@ systemctl cat reverse-ollama
 ## Tests
 ```bash
 npm test
+```
+
+## Run session viewer
+`SESSION_VIEWER_PASSWORD` is mandatory.
+
+```bash
+SESSION_VIEWER_PASSWORD=secret npm run viewer
+```
+
+With custom env:
+```bash
+SESSION_VIEWER_HOST=0.0.0.0 SESSION_VIEWER_PORT=8080 SESSION_VIEWER_PASSWORD=secret SESSION_LOG_DIR=/var/log/reverse-ollama/sessions npm run viewer
+```
+
+## systemd setup for session viewer (Debian)
+Service file: `systemd/reverse-ollama-viewer.service`
+
+Create `/etc/default/reverse-ollama-viewer` with a password:
+```bash
+sudo tee /etc/default/reverse-ollama-viewer >/dev/null <<'EOF'
+SESSION_VIEWER_PASSWORD=change-me-strong-password
+EOF
+sudo chmod 600 /etc/default/reverse-ollama-viewer
+```
+
+Install and start:
+```bash
+sudo cp systemd/reverse-ollama-viewer.service /etc/systemd/system/reverse-ollama-viewer.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now reverse-ollama-viewer
 ```
 
 ## Troubleshooting

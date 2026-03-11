@@ -14,3 +14,14 @@ The reverse proxy:
 - keeps payload content out of normal logs by default
 - supports debug-only request/response payload logging controlled by environment flags
 - supports configurable upstream timeout via environment variable (`UPSTREAM_TIMEOUT_MS`) with default `60000`
+- supports optional session logging that stores full request/response pairs as JSONL files on disk (Debian default: `/var/log/reverse-ollama/sessions`) using source-aware filenames with UTC timestamp granularity down to milliseconds (prefer `x-forwarded-for`, then `x-forwarded`, then socket IP)
+- session JSONL entries use a pi-compatible session structure (header + entries tree + leafId) while preserving raw proxy request/response metadata under `_proxy`
+- includes a built-in session viewer web server for browsing stored sessions
+  - viewer host is configurable via `SESSION_VIEWER_HOST` (default: `127.0.0.1`, set `0.0.0.0` for external access)
+  - viewer port is configurable via `SESSION_VIEWER_PORT` (default: `3000`)
+  - mandatory basic auth with username `admin` and password from `SESSION_VIEWER_PASSWORD` (viewer must not start without password)
+  - first screen lists sessions; selecting a session shows details and a back button
+  - session list columns include `Tokens` (in/out per request) and `Time` (request-to-response duration)
+  - session detail header also shows `Tokens` (in/out) and request `Time`
+  - session detail message bodies preserve line breaks and render basic Markdown safely (e.g. headings, lists, bold/italic, inline code)
+  - browser back/forward navigation must mirror in-app navigation between list and detail views

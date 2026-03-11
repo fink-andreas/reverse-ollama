@@ -38,6 +38,27 @@
 - Added integration test coverage for `Expect: 100-continue` forwarding behavior
 - Increased default upstream timeout to `60000ms` (configurable via `UPSTREAM_TIMEOUT_MS`)
 - Added debug response payload logging (truncated by `LOG_PAYLOAD_MAX_BYTES`) alongside existing request payload debug logging
+- Added optional session JSONL logging for full request/response pairs (`SESSION_LOG_ENABLED`, `SESSION_LOG_DIR`)
+- Updated session JSONL file naming to include request source (prefer `x-forwarded-for`, then `x-forwarded`, then socket IP)
+- Updated session JSONL filename format to include full UTC timestamp down to milliseconds (`session-YYYY-MM-DD-HH-mm-ss-SSS-<source>.jsonl`)
+- Added pi-compatible session conversion (`src/pi-session-format.js`) and integrated it into proxy session logging
+- Added session viewer web server (`src/session-viewer-server.js`) with JSON APIs and embedded HTML UI (list/detail + back navigation)
+- Added session viewer authentication via basic auth (`admin` + `SESSION_VIEWER_PASSWORD`)
+- Added session viewer integration tests and fixed startup/runtime issues (duplicate imports, temp dir setup)
+- Added CLI/npm entrypoint for viewer (`npm run viewer`)
+- Added configurable session viewer bind host via `SESSION_VIEWER_HOST` (default `127.0.0.1`, supports `0.0.0.0`)
+- Enforced mandatory viewer auth: `SESSION_VIEWER_PASSWORD` is required and viewer exits if missing
+- Added dedicated systemd unit for viewer: `systemd/reverse-ollama-viewer.service`
+- Updated viewer navigation so browser back/forward mirrors in-app list/detail navigation
+- Extended `dvl_deploy.sh` to deploy/restart both proxy and viewer systemd units (viewer restart gated on password env file)
+- Extended viewer session list with `Tokens` (in/out) and `Time` (request-to-response duration) columns
+- Added token and request-time fields to session detail header in viewer
+- Added proxy session metadata field `_proxy.durationMs` to support viewer request-time display
+- Fixed viewer message rendering to preserve line breaks for user/assistant/system content (`.message-content { white-space: pre-wrap }`)
+- Added safe basic Markdown rendering for viewer message content (headings, lists, bold/italic, inline code)
+- Fixed HTML-template escaping in viewer markdown renderer to avoid browser syntax errors (unterminated regex)
+- Reduced session viewer paragraph spacing in rendered message content for denser readability
+- Reworked viewer typography CSS to use dedicated content line-height and tighter markdown block spacing
 
 ---
 
@@ -61,17 +82,17 @@
 
 ## Current Focus
 - All main milestones are complete.
-- Logging hardening update completed for debug-only payload visibility behind explicit environment flags.
-- Next optional phase: production hardening and operational polish.
+- Session logging now emits pi-compatible sessions and includes a web session viewer with optional auth.
+- Current focus is documentation polish and operational hardening for the new viewer flow.
 
 ---
 
 ## Next Steps (optional)
-1. Add hot config reload by file watcher (optional)
-2. Add richer transformation DSL and endpoint-specific transforms
-3. Add request/response metrics export (Prometheus)
-4. Add CI workflow for tests and linting
-5. Add benchmark script for streaming latency/throughput
+1. Add CI workflow for tests and linting
+2. Add request/response metrics export (Prometheus)
+3. Add benchmark script for streaming latency/throughput
+4. Add viewer pagination/filtering for large session directories
+5. Add hot config reload by file watcher (optional)
 
 ---
 

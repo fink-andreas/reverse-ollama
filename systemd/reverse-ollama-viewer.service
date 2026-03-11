@@ -1,0 +1,23 @@
+[Unit]
+Description=reverse-ollama session viewer
+After=network.target reverse-ollama.service
+Requires=reverse-ollama.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/afi/dvl/reverse-ollama
+# Keep secrets out of the unit file; define SESSION_VIEWER_PASSWORD in this env file.
+EnvironmentFile=-/etc/default/reverse-ollama-viewer
+ExecStartPre=/bin/sh -c 'test -n "$SESSION_VIEWER_PASSWORD"'
+ExecStart=/usr/bin/env node /home/afi/dvl/reverse-ollama/src/session-viewer-server.js
+Environment=NODE_ENV=production
+Environment=SESSION_VIEWER_HOST=127.0.0.1
+Environment=SESSION_VIEWER_PORT=3000
+Environment=SESSION_LOG_DIR=/var/log/reverse-ollama/sessions
+Restart=on-failure
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

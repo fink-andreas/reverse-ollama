@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -97,6 +97,8 @@ describe('proxy integration', () => {
     delete process.env.UPSTREAM_TIMEOUT_MS;
     delete process.env.LOG_PAYLOADS;
     delete process.env.LOG_PAYLOAD_MAX_BYTES;
+    delete process.env.SESSION_LOG_ENABLED;
+    delete process.env.SESSION_LOG_DIR;
   });
 
   it('forwards request transparently and supports streaming', async () => {
@@ -312,6 +314,83 @@ describe('proxy integration', () => {
     expect(responsePayloadLog.obj.responsePayloadBytes).toBeGreaterThan(24);
     expect(responsePayloadLog.obj.responsePayloadTruncated).toBe(true);
     expect(responsePayloadLog.obj.responsePayload).toContain('codellama');
+  });
+
+  it('writes full request/response session log entries when enabled', async () => {
+    const upstream = http.createServer(async (req, res) => {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          received: Buffer.concat(chunks).toString('utf8'),
+        }),
+      );
+    });
+
+    const upstreamPort = await listen(upstream);
+    servers.push(upstream);
+
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'reverse-ollama-test-'));
+    const configPath = path.join(tempDir, 'categories.json');
+    const sessionDir = path.join(tempDir, 'sessions');
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        categories: [
+          {
+            name: 'rewrite',
+            endpoints: ['/api/chat'],
+            match: { modelRegex: '^gpt-oss', flags: 'i' },
+            actions: { model: 'qwen3.5:27b', num_ctx: 65000 },
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    const proxyPort = await getFreePort();
+    process.env.REVERSE_OLLAMA_CONFIG = configPath;
+    process.env.OLLAMA_UPSTREAM = `http://127.0.0.1:${upstreamPort}`;
+    process.env.SESSION_LOG_ENABLED = 'true';
+    process.env.SESSION_LOG_DIR = sessionDir;
+
+    const proxy = await createReverseOllamaServer({ host: '127.0.0.1', port: proxyPort });
+    await proxy.start();
+    servers.push(proxy);
+
+    const response = await fetchWithTimeout(`http://127.0.0.1:${proxyPort}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': '198.51.100.77',
+      },
+      body: JSON.stringify({ model: 'gpt-oss:120b', messages: [{ role: 'user', content: 'hello' }] }),
+    });
+
+    expect(response.status).toBe(200);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const files = await readdir(sessionDir);
+    expect(files.length).toBe(1);
+    expect(files[0]).toContain('198.51.100.77');
+
+    const sessionPath = path.join(sessionDir, files[0]);
+    const content = await readFile(sessionPath, 'utf8');
+    const lines = content.trim().split('\n');
+    expect(lines.length).toBeGreaterThan(0);
+
+    const entry = JSON.parse(lines.at(-1));
+    expect(entry._proxy.source).toBe('198.51.100.77');
+    expect(entry._proxy.path).toBe('/api/chat');
+    expect(entry._proxy.matchedCategory).toBe('rewrite');
+    expect(entry._proxy.appliedActions).toContain('replace:model');
+    expect(entry._proxy.request.incomingBody).toContain('gpt-oss:120b');
+    expect(entry._proxy.request.outgoingBody).toContain('qwen3.5:27b');
+    expect(entry._proxy.statusCode).toBe(200);
+    expect(entry._proxy.response.body).toContain('qwen3.5:27b');
   });
 
   it('returns 400 for invalid JSON body when inspection is required', async () => {

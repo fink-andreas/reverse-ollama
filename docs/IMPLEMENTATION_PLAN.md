@@ -345,3 +345,19 @@ The MVP is done when:
 - Request mutation requires buffering/parsing JSON requests before forwarding
 - Ollama request schemas differ by endpoint, so transforms should be endpoint-aware
 - Regex matching across chat message arrays needs careful normalization
+
+---
+
+## Post-M11 Extensions (implemented)
+- Added pi-compatible session log conversion layer (`src/pi-session-format.js`)
+- Added session viewer web server (`src/session-viewer-server.js`) with:
+  - session list API
+  - session detail API
+  - embedded list/detail web UI
+  - optional basic auth via environment variable
+- Added viewer integration tests and CLI startup entrypoint (`npm run viewer`)
+- Added configurable viewer host binding via `SESSION_VIEWER_HOST`
+- Enforced mandatory viewer authentication (`SESSION_VIEWER_PASSWORD` required)
+- Added dedicated viewer systemd unit (`systemd/reverse-ollama-viewer.service`)
+- Extended session viewer list with per-request token usage (in/out) and request-to-response duration columns
+- Updated viewer detail message rendering to preserve line breaks and render safe basic Markdown
