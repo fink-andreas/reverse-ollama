@@ -64,6 +64,13 @@
 - Unified message text block rendering structure for user/assistant/system to ensure consistent line rendering behavior
 - Updated viewer plain-text renderer to emit paragraph tags from blank-line-separated content (with `<br>` for intra-paragraph line breaks)
 - Refined deduplication strategy to a scalable threshold-based approach: deduplication is applied only when duplicate removal impact reaches at least 60 affected characters (reverted special-case handling)
+- Added "reasoning" role support in session viewer: `message.reasoning` field creates separate reasoning entry with distinct visual styling (italic, muted, warning border), includes unit tests
+- Extended deduplication feature with configurable prefix pattern support:
+  - Added `config/deduplication.json` for storing prefix patterns that should only appear at the beginning of text fields
+  - Patterns are loaded at startup and reloaded on `SIGHUP`
+  - Deduplication removes all subsequent occurrences of prefix patterns while keeping the first occurrence
+  - Added `DEDUPLICATION_CONFIG` environment variable for custom config path
+  - Applied actions now include `deduplicate:prefix:<pattern-id>` when prefix patterns are removed
 
 ---
 

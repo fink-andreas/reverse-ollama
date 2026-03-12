@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { logger as defaultLogger } from './logger.js';
 import { loadConfig } from './config.js';
 import { proxyRequest } from './proxy.js';
+import { ensureDeduplicationConfigLoaded, resetDeduplicationConfig } from './transform.js';
 
 const DEFAULT_HOST = process.env.HOST || '0.0.0.0';
 const DEFAULT_PORT = Number(process.env.PORT || 11435);
@@ -16,6 +17,10 @@ export async function createReverseOllamaServer({
 } = {}) {
   let loadedConfig = await loadConfig();
   logger.info({ configPath: loadedConfig.configPath }, 'configuration loaded');
+
+  // Load deduplication config
+  await ensureDeduplicationConfigLoaded();
+  logger.info('deduplication configuration loaded');
 
   const server = http.createServer(async (req, res) => {
     const requestId = randomUUID();
@@ -51,6 +56,9 @@ export async function createReverseOllamaServer({
   const reloadConfig = async () => {
     loadedConfig = await loadConfig();
     logger.info({ configPath: loadedConfig.configPath }, 'configuration reloaded');
+    resetDeduplicationConfig();
+    await ensureDeduplicationConfigLoaded();
+    logger.info('deduplication configuration reloaded');
   };
 
   const start = () =>

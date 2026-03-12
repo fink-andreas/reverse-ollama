@@ -159,6 +159,11 @@
       color: var(--success);
     }
 
+    .tree-role-reasoning {
+      color: var(--warning);
+      font-style: italic;
+    }
+
     .tree-muted {
       color: var(--muted);
     }
@@ -286,6 +291,16 @@
       padding: var(--line-height);
       border-radius: 4px;
       position: relative;
+    }
+
+    .reasoning-message {
+      background: var(--info-bg);
+      color: var(--thinkingText);
+      padding: var(--line-height);
+      border-radius: 4px;
+      position: relative;
+      font-style: italic;
+      border-left: 3px solid var(--warning);
     }
 
     .assistant-message {
@@ -692,7 +707,7 @@
 
             if (matchesFilter) {
               const entryClass = entry.type === 'message'
-                ? (entry.message?.role === 'user' ? 'tree-role-user' : 'tree-role-assistant')
+                ? (entry.message?.role === 'user' ? 'tree-role-user' : entry.message?.role === 'reasoning' ? 'tree-role-reasoning' : 'tree-role-assistant')
                 : entry.type === 'error' ? 'tree-error'
                 : entry.type === 'model_change' ? 'tree-model'
                 : '';
@@ -767,7 +782,8 @@
             preview = String(content || '');
           }
           const truncated = preview.length > 40 ? preview.slice(0, 40) + '...' : preview;
-          return `${role}: ${truncated}`;
+          const roleLabel = role === 'reasoning' ? 'Reasoning' : role;
+          return `${roleLabel}: ${truncated}`;
         case 'error':
           return `Error: ${entry.error?.message || 'unknown'}`;
         default:
@@ -913,6 +929,12 @@
             html += `
               <div class="user-message" id="entry-${entry.id}">
                 ${contentHtml}
+              </div>
+            `;
+          } else if (role === 'reasoning') {
+            html += `
+              <div class="reasoning-message" id="entry-${entry.id}">
+                <div class="markdown-content">${contentHtml}</div>
               </div>
             `;
           } else if (role === 'assistant') {

@@ -414,6 +414,16 @@ function getViewerHtml() {
       font-size: 0;
     }
 
+    .reasoning-message {
+      background: var(--info-bg, rgb(72, 68, 65));
+      color: var(--thinkingText);
+      padding: var(--line-height);
+      border-radius: 4px;
+      font-style: italic;
+      border-left: 3px solid var(--warning);
+      font-size: 0;
+    }
+
     .message-content {
       overflow-wrap: anywhere;
       line-height: var(--content-line-height);
@@ -456,6 +466,7 @@ function getViewerHtml() {
     .message-role.user { color: var(--accent); }
     .message-role.assistant { color: var(--success); }
     .message-role.system { color: var(--customMessageLabel); }
+    .message-role.reasoning { color: var(--warning); }
 
     /* Model change */
     .model-change {
@@ -876,6 +887,13 @@ function getViewerHtml() {
             html += \`
               <div class="user-message" style="background: var(--customMessageBg);">
                 <div class="message-role system">System</div>
+                <div class="message-content"><div class="message-text">\${contentHtml}</div></div>
+              </div>
+            \`;
+          } else if (role === 'reasoning') {
+            html += \`
+              <div class="reasoning-message">
+                <div class="message-role reasoning">Reasoning</div>
                 <div class="message-content"><div class="message-text">\${contentHtml}</div></div>
               </div>
             \`;

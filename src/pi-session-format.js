@@ -37,7 +37,7 @@ function parseChatRequest(incomingBody) {
  */
 function parseChatResponse(responseBody) {
   if (!responseBody) {
-    return { content: [], model: null, usage: null, stopReason: null };
+    return { content: [], reasoning: null, model: null, usage: null, stopReason: null };
   }
 
   try {
@@ -47,6 +47,7 @@ function parseChatResponse(responseBody) {
     if (parsed.choices && Array.isArray(parsed.choices)) {
       const choice = parsed.choices[0];
       const content = [];
+      let reasoning = null;
 
       if (choice?.message?.content) {
         content.push({
@@ -55,7 +56,14 @@ function parseChatResponse(responseBody) {
         });
       }
 
-      // Check for reasoning/thinking content (some providers add this)
+      // Check for reasoning field (creates separate reasoning entry)
+      if (choice?.message?.reasoning) {
+        reasoning = {
+          type: 'text',
+          text: choice.message.reasoning,
+        };
+      }
+      // Also check for reasoning_content / thinking (inline thinking content)
       if (choice?.message?.reasoning_content || choice?.message?.thinking) {
         content.unshift({
           type: 'thinking',
@@ -65,6 +73,7 @@ function parseChatResponse(responseBody) {
 
       return {
         content,
+        reasoning,
         model: parsed.model || null,
         usage: parsed.usage || null,
         stopReason: choice?.finish_reason || 'stop',
@@ -74,14 +83,26 @@ function parseChatResponse(responseBody) {
     // Ollama format
     if (parsed.message) {
       const content = [];
+      let reasoning = null;
+
       if (parsed.message.content) {
         content.push({
           type: 'text',
           text: parsed.message.content,
         });
       }
+
+      // Check for reasoning field in Ollama format
+      if (parsed.message.reasoning) {
+        reasoning = {
+          type: 'text',
+          text: parsed.message.reasoning,
+        };
+      }
+
       return {
         content,
+        reasoning,
         model: parsed.model || null,
         usage: parsed.eval_count ? {
           input: parsed.prompt_eval_count || 0,
@@ -92,9 +113,9 @@ function parseChatResponse(responseBody) {
       };
     }
 
-    return { content: [], model: parsed.model || null, usage: null, stopReason: null };
+    return { content: [], reasoning: null, model: parsed.model || null, usage: null, stopReason: null };
   } catch {
-    return { content: [], model: null, usage: null, stopReason: null };
+    return { content: [], reasoning: null, model: null, usage: null, stopReason: null };
   }
 }
 
@@ -230,6 +251,24 @@ export function buildPiSession({
 
     entries.push(messageEntry);
     lastEntryId = messageEntry.id;
+  }
+
+  // Add reasoning entry if present (before assistant response)
+  if (response.reasoning) {
+    const reasoningEntry = {
+      type: 'message',
+      id: generateShortId(),
+      parentId: lastEntryId,
+      timestamp: now,
+      message: {
+        role: 'reasoning',
+        content: [response.reasoning],
+        timestamp: Date.now(),
+      },
+    };
+
+    entries.push(reasoningEntry);
+    lastEntryId = reasoningEntry.id;
   }
 
   // Add assistant response
