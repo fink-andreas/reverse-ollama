@@ -57,6 +57,18 @@
 - Added proxy session metadata field `_proxy.durationMs` to support viewer request-time display
 - Fixed viewer message rendering to preserve line breaks for user/assistant/system content (`.message-content { white-space: pre-wrap }`)
 - Rendered viewer message content as plain escaped text with preserved line breaks (no Markdown-to-HTML conversion)
+- Fixed embedded session viewer detail rendering for assistant tool calls:
+  - supports tool calls stored in `content[]` (`toolCall`, `tool_call`, `tool-call`)
+  - supports both `message.tool_calls` and `message.toolCalls`
+  - renders paired `toolResult` output inline with tool calls when available
+  - avoids emitting empty assistant content wrappers that created awkward whitespace-only blocks
+- Fixed request-history tool rendering in pi session conversion/viewer:
+  - maps OpenAI request `role: "tool"` messages to viewer-compatible `toolResult`
+  - preserves request-side assistant `reasoning` and `tool_calls`
+  - suppresses empty assistant history nodes with no visible text, reasoning, tool calls, usage, or model
+  - accepts string-valued tool result content in addition to structured text blocks
+- Fixed embedded viewer JavaScript string escaping regression in `getToolResultText()` that could break startup with a syntax error
+- Hardened embedded viewer tool-result joining logic to use `String.fromCharCode(10)` instead of an escaped newline literal to avoid browser parse issues in generated HTML
 - Fixed HTML-template escaping issues in embedded viewer message rendering logic
 - Reduced session viewer paragraph/typography spacing for denser readability
 - Reworked viewer typography CSS to use dedicated content line-height decoupled from layout spacing
@@ -65,12 +77,20 @@
 - Updated viewer plain-text renderer to emit paragraph tags from blank-line-separated content (with `<br>` for intra-paragraph line breaks)
 - Refined deduplication strategy to a scalable threshold-based approach: deduplication is applied only when duplicate removal impact reaches at least 60 affected characters (reverted special-case handling)
 - Added "reasoning" role support in session viewer: `message.reasoning` field creates separate reasoning entry with distinct visual styling (italic, muted, warning border), includes unit tests
+- Fixed SSE streaming response parsing: reasoning and content deltas are now properly accumulated from multiple `data:` chunks into complete text, instead of being treated as separate entries per chunk
 - Extended deduplication feature with configurable prefix pattern support:
   - Added `config/deduplication.json` for storing prefix patterns that should only appear at the beginning of text fields
   - Patterns are loaded at startup and reloaded on `SIGHUP`
   - Deduplication removes all subsequent occurrences of prefix patterns while keeping the first occurrence
   - Added `DEDUPLICATION_CONFIG` environment variable for custom config path
   - Applied actions now include `deduplicate:prefix:<pattern-id>` when prefix patterns are removed
+- Added `parameters` action for setting/overriding Ollama model parameters:
+  - Parameters are merged directly into the request body (not restricted to `options`)
+  - Supported parameters include `temperature`, `top_p`, `top_k`, `num_predict`, `repeat_penalty`, `seed`, `stop`, etc.
+  - Config schema updated to accept `parameters` object in actions
+  - Added comprehensive test coverage for parameters action handling
+  - Applied actions log as `set:parameters:<param1,param2,...>` when parameters are set
+  - Updated README.md with detailed documentation and parameter reference table
 
 ---
 
