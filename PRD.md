@@ -9,11 +9,15 @@ The reverse proxy:
 - supports streaming
 - supports detection of specific request categories via regexp
 - has configurable categories (e.g. via JSON config file)
-- can apply actions to categories, like replacing model name and adding/replacing/changing context size (or other completions API related fields)
-- supports optional instruction deduplication action (`actions.deduplication: true`) that:
-  - removes repeated lines in `prompt`, `input`, and `messages[].content` only if deduplication impact crosses a minimum threshold (default: 60 affected characters)
-  - removes duplicate prefix patterns defined in `config/deduplication.json` (keeps first occurrence, removes subsequent appearances)
-  - prefix patterns are text blocks that should only appear once at the beginning of a text field
+- can apply actions to categories:
+  - replace model name
+  - add/replacing context size (or other completions API related fields) via `num_ctx` action
+  - add/set arbitrary model parameters via `parameters` action (e.g., `temperature`, `top_p`, `num_predict`, `repeat_penalty`, `seed`, `stop`)
+  - shallow merge top-level fields via `set` action
+  - optional instruction deduplication action (`actions.deduplication: true`) that:
+    - removes repeated lines in `prompt`, `input`, and `messages[].content` only if deduplication impact crosses a minimum threshold (default: 60 affected characters)
+    - removes duplicate prefix patterns defined in `config/deduplication.json` (keeps first occurrence, removes subsequent appearances)
+    - prefix patterns are text blocks that should only appear once at the beginning of a text field
 - provides structured logs
 - keeps payload content out of normal logs by default
 - supports debug-only request/response payload logging controlled by environment flags

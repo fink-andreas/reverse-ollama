@@ -11,6 +11,7 @@ It listens on `11435` (default), forwards traffic to `127.0.0.1:11434`, supports
 - Configurable actions per category:
   - replace `model`
   - set `options.num_ctx`
+  - add/set Ollama model parameters via `actions.parameters` (e.g., `temperature`, `top_p`, `num_predict`)
   - deduplicate repeated instruction lines in `prompt` / `input` / `messages[].content` (`actions.deduplication: true`) when at least 60 characters are affected
   - shallow merge top-level fields via `actions.set`
 - Structured JSON logs (journald-friendly)
@@ -96,10 +97,67 @@ Example config:
           "temperature": 0.2
         }
       }
+    },
+    {
+      "name": "low-temperature-creative",
+      "endpoints": ["/api/chat", "/api/generate", "/v1/chat/completions"],
+      "match": {
+        "modelRegex": "^(qwen|llama).*"
+      },
+      "actions": {
+        "parameters": {
+          "temperature": 0.3,
+          "top_p": 0.9,
+          "num_predict": 4096,
+          "repeat_penalty": 1.1
+        }
+      }
     }
   ]
 }
 ```
+
+### Model parameters via `actions.parameters`
+
+The `parameters` action allows you to set or replace Ollama model parameters directly in the request body. These parameters are merged into the request for both `/api/chat` and `/api/generate` endpoints.
+
+Commonly supported Ollama parameters:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `temperature` | number (0.0-1.0) | Controls randomness. Lower values make output more focused/deterministic. |
+| `top_p` | number (0.0-1.0) | Nucleus sampling threshold. Filters out tokens with cumulative probability below this value. |
+| `top_k` | number | Top-k sampling. Limits generation to the K most likely tokens. |
+| `num_predict` | number | Maximum number of tokens to generate (output limit). |
+| `num_ctx` | number | Context window size. Can also be set via `num_ctx` action (added to `options`). |
+| `repeat_penalty` | number | Penalty for token repetition (1.0 = no penalty, >1.0 = discourage repetition). |
+| `seed` | number | Random seed for reproducible generation. |
+| `stop` | string or string[] | Stop sequences that end generation when encountered. |
+
+Example Request (before proxy):
+```json
+{
+  "model": "qwen3.5:35b",
+  "messages": [
+    { "role": "user", "content": "Explain quantum computing" }
+  ]
+}
+```
+
+Example Request (after applying `parameters` action):
+```json
+{
+  "model": "qwen3.5:35b",
+  "messages": [
+    { "role": "user", "content": "Explain quantum computing" }
+  ],
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "num_predict": 2048
+}
+```
+
+The `parameters` action overwrites existing values if they are present in the original request. To allow client-specified values, do not include them in the `parameters` action.
 
 ### Match fields
 Inside `match`:

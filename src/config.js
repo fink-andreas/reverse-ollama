@@ -45,6 +45,7 @@ const schema = {
               num_ctx: { type: 'integer', minimum: 1 },
               deduplication: { type: 'boolean' },
               set: { type: 'object' },
+              parameters: { type: 'object' },
             },
           },
         },

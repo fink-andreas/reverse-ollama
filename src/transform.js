@@ -247,6 +247,16 @@ export function applyActions({ requestBody, category }) {
     appliedActions.push('merge:set');
   }
 
+  if (isObject(actions.parameters)) {
+    // Merge parameters directly into the request body
+    // This works for Ollama parameters like temperature, top_p, num_predict, etc.
+    const paramKeys = Object.keys(actions.parameters);
+    if (paramKeys.length > 0) {
+      Object.assign(next, actions.parameters);
+      appliedActions.push(`set:parameters:${paramKeys.join(',')}`);
+    }
+  }
+
   if (actions.deduplication === true) {
     const dedupResult = deduplicateRequestTextFields(next);
     if (dedupResult.modified) {
@@ -257,8 +267,27 @@ export function applyActions({ requestBody, category }) {
     }
   }
 
+  // Move messages, prompt, and input to the very end of the request body
+  // This ensures parameters appear before content fields in the final JSON
+  const reordered = {};
+  const contentFields = ['messages', 'prompt', 'input'];
+
+  // Copy all fields except content fields
+  for (const key of Object.keys(next)) {
+    if (!contentFields.includes(key)) {
+      reordered[key] = next[key];
+    }
+  }
+
+  // Append content fields at the end (in order of preference)
+  for (const field of contentFields) {
+    if (field in next) {
+      reordered[field] = next[field];
+    }
+  }
+
   return {
-    requestBody: next,
+    requestBody: reordered,
     appliedActions,
   };
 }

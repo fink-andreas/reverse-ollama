@@ -148,9 +148,133 @@ describe('applyActions', () => {
     expect(result.requestBody.prompt).toContain('Task 1');
     expect(result.requestBody.prompt).toContain('Task 2');
     expect(result.requestBody.prompt).toContain('JSON data');
-    
+
     // Count occurrences of the pattern start - should be exactly 1
     const occurrences = result.requestBody.prompt.split('Antworte sachlich').length - 1;
     expect(occurrences).toBe(1);
+  });
+
+  it('sets model parameters directly on request body', () => {
+    const category = {
+      actions: {
+        parameters: {
+          temperature: 0.7,
+          top_p: 0.9,
+          num_predict: 2048,
+        },
+      },
+    };
+
+    const input = {
+      model: 'qwen3.5:35b',
+      messages: [{ role: 'user', content: 'test' }],
+    };
+
+    const result = applyActions({ requestBody: input, category });
+
+    expect(result.requestBody.temperature).toBe(0.7);
+    expect(result.requestBody.top_p).toBe(0.9);
+    expect(result.requestBody.num_predict).toBe(2048);
+    expect(result.requestBody.model).toBe('qwen3.5:35b');
+    expect(result.appliedActions).toContain('set:parameters:temperature,top_p,num_predict');
+  });
+
+  it('overwrites existing parameters when specified in action', () => {
+    const category = {
+      actions: {
+        parameters: {
+          temperature: 0.3,
+          seed: 42,
+        },
+      },
+    };
+
+    const input = {
+      model: 'llama3',
+      temperature: 0.8,
+      seed: 123,
+      prompt: 'test',
+    };
+
+    const result = applyActions({ requestBody: input, category });
+
+    expect(result.requestBody.temperature).toBe(0.3);
+    expect(result.requestBody.seed).toBe(42);
+    expect(result.requestBody.model).toBe('llama3');
+    expect(result.appliedActions).toContain('set:parameters:temperature,seed');
+  });
+
+  it('applies parameters alongside other actions', () => {
+    const category = {
+      actions: {
+        model: 'qwen3.5:35b',
+        num_ctx: 16384,
+        parameters: {
+          temperature: 0.5,
+          top_k: 40,
+        },
+      },
+    };
+
+    const input = {
+      model: 'deepseek',
+      prompt: 'test',
+    };
+
+    const result = applyActions({ requestBody: input, category });
+
+    expect(result.requestBody.model).toBe('qwen3.5:35b');
+    expect(result.requestBody.options.num_ctx).toBe(16384);
+    expect(result.requestBody.temperature).toBe(0.5);
+    expect(result.requestBody.top_k).toBe(40);
+    expect(result.appliedActions).toContain('replace:model');
+    expect(result.appliedActions).toContain('set:options.num_ctx');
+    expect(result.appliedActions).toContain('set:parameters:temperature,top_k');
+  });
+
+  it('handles empty parameters object', () => {
+    const category = {
+      actions: {
+        parameters: {},
+      },
+    };
+
+    const input = { model: 'test', prompt: 'hello' };
+    const result = applyActions({ requestBody: input, category });
+
+    expect(result.requestBody).toEqual(input);
+    // Empty object should not add an action entry
+    expect(result.appliedActions).not.toContain('set:parameters:');
+  });
+
+  it('sets parameters for chat completions format', () => {
+    const category = {
+      actions: {
+        parameters: {
+          temperature: 0.6,
+          max_tokens: 1024,
+          presence_penalty: 0.5,
+        },
+      },
+    };
+
+    const input = {
+      model: 'qwen3.5:35b',
+      store: false,
+      user: 'user',
+      messages: [
+        { role: 'user', content: 'Antworte sachlich...' },
+      ],
+      n: 1,
+    };
+
+    const result = applyActions({ requestBody: input, category });
+
+    expect(result.requestBody.temperature).toBe(0.6);
+    expect(result.requestBody.max_tokens).toBe(1024);
+    expect(result.requestBody.presence_penalty).toBe(0.5);
+    expect(result.requestBody.store).toBe(false);
+    expect(result.requestBody.n).toBe(1);
+    expect(result.appliedActions).toContain('set:parameters:temperature,max_tokens,presence_penalty');
   });
 });
