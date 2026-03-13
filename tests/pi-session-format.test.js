@@ -86,7 +86,7 @@ describe('pi-session-format', () => {
 
       // Check reasoning content
       const reasoningEntry = session.entries.find(e => e.message?.role === 'reasoning');
-      expect(reasoningEntry.message.content[0].text).toBe('Thinking: 2+2 equals 4');
+      expect(reasoningEntry.message.content[0].thinking).toBe('Thinking: 2+2 equals 4');
     });
 
     it('should create reasoning entry from OpenAI choices format', () => {
@@ -117,7 +117,7 @@ describe('pi-session-format', () => {
       expect(roles).toContain('reasoning');
 
       const reasoningEntry = session.entries.find(e => e.message?.role === 'reasoning');
-      expect(reasoningEntry.message.content[0].text).toBe('Let me think about this...');
+      expect(reasoningEntry.message.content[0].thinking).toBe('Let me think about this...');
     });
 
     it('should not create reasoning entry when not present', () => {
@@ -174,6 +174,58 @@ describe('pi-session-format', () => {
       const thinkingContent = assistantEntry.message.content.find(c => c.type === 'thinking');
       expect(thinkingContent).toBeDefined();
       expect(thinkingContent.thinking).toBe('Internal thinking...');
+    });
+
+    it('should map request-side assistant tool calls and tool results', () => {
+      const session = buildPiSession({
+        requestId: 'test-tools',
+        source: '127.0.0.1',
+        method: 'POST',
+        path: '/v1/chat/completions',
+        incomingBody: JSON.stringify({
+          model: 'qwen',
+          messages: [
+            { role: 'user', content: 'what is IPVA?' },
+            {
+              role: 'assistant',
+              content: null,
+              reasoning: 'Need to search docs',
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: {
+                    name: 'bash',
+                    arguments: '{"command":"rg -i ipva ."}',
+                  },
+                },
+              ],
+            },
+            {
+              role: 'tool',
+              tool_call_id: 'call_1',
+              content: 'match found',
+              name: 'bash',
+            },
+          ],
+        }),
+        responseBody: JSON.stringify({
+          model: 'qwen',
+          choices: [{ message: { role: 'assistant', content: 'IPVA is ...' }, finish_reason: 'stop' }],
+        }),
+        statusCode: 200,
+      });
+
+      const requestAssistant = session.entries.find((e) => e.message?.role === 'assistant' && e.message?.tool_calls);
+      expect(requestAssistant).toBeDefined();
+      expect(requestAssistant.message.reasoning).toBe('Need to search docs');
+      expect(requestAssistant.message.tool_calls[0].id).toBe('call_1');
+
+      const toolResult = session.entries.find((e) => e.message?.role === 'toolResult');
+      expect(toolResult).toBeDefined();
+      expect(toolResult.message.toolCallId).toBe('call_1');
+      expect(toolResult.message.toolName).toBe('bash');
+      expect(toolResult.message.content[0].text).toBe('match found');
     });
 
     it('should include proxy metadata', () => {

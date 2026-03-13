@@ -320,6 +320,97 @@
       white-space: pre-wrap;
     }
 
+    /* Tool executions (pi-style) */
+    .tool-execution {
+      padding: 6px 8px;
+      margin: 8px 0;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+
+    .tool-execution + .tool-execution {
+      margin-top: 0;
+    }
+
+    .assistant-text + .tool-execution {
+      margin-top: 8px;
+    }
+
+    .tool-execution.pending { background: var(--toolPendingBg); }
+    .tool-execution.success { background: var(--toolSuccessBg); }
+    .tool-execution.error { background: var(--toolErrorBg); }
+
+    .tool-header {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .tool-name {
+      font-weight: bold;
+      color: var(--warning);
+    }
+
+    .tool-path {
+      color: var(--accent);
+    }
+
+    .tool-path .line-numbers {
+      color: var(--warning);
+    }
+
+    .line-count {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .tool-output {
+      margin-top: 6px;
+      padding: 6px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 3px;
+    }
+
+    .tool-output pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-family: inherit;
+      font-size: 10px;
+      line-height: 14px;
+    }
+
+    .tool-output > div {
+      padding: 0;
+      line-height: 14px;
+    }
+
+    .expand-hint {
+      color: var(--muted);
+      font-style: italic;
+      padding-top: 4px;
+    }
+
+    .tool-diff {
+      margin-top: 6px;
+      font-size: 10px;
+      line-height: 14px;
+    }
+
+    .tool-diff .diff-added { color: var(--success); }
+    .tool-diff .diff-removed { color: var(--error); }
+    .tool-diff .diff-context { color: var(--muted); }
+
+    .tool-error {
+      color: var(--error);
+    }
+
+    .error-text {
+      color: var(--error);
+      padding: 8px;
+      font-size: 11px;
+    }
+
     /* Proxy metadata block */
     .proxy-block {
       background: var(--customMessageBg);
@@ -774,13 +865,26 @@
         case 'message':
           const role = entry.message?.role || 'unknown';
           const content = entry.message?.content;
+          const toolCalls = entry.message?.tool_calls;
+          const reasoning = entry.message?.reasoning;
           let preview = '';
-          if (Array.isArray(content)) {
+
+          // Build preview from reasoning, content text, or tool calls
+          if (reasoning) {
+            preview = reasoning;
+          } else if (Array.isArray(content)) {
             const textPart = content.find(c => c.type === 'text');
             preview = textPart?.text || '';
           } else {
             preview = String(content || '');
           }
+
+          // If no text content but has tool calls, show tool names
+          if (!preview && Array.isArray(toolCalls) && toolCalls.length > 0) {
+            const toolNames = toolCalls.map(tc => tc.function?.name || tc.name || 'tool').join(', ');
+            preview = `[tools: ${toolNames}]`;
+          }
+
           const truncated = preview.length > 40 ? preview.slice(0, 40) + '...' : preview;
           const roleLabel = role === 'reasoning' ? 'Reasoning' : role;
           return `${roleLabel}: ${truncated}`;
@@ -887,6 +991,165 @@
       }
     }
 
+    // Build tool call lookup (toolCallId -> {name, arguments})
+    function buildToolCallMap(entries) {
+      const map = new Map();
+      for (const entry of entries) {
+        if (entry.type === 'message' && entry.message?.role === 'assistant') {
+          const content = entry.message.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'toolCall') {
+                map.set(block.id, { name: block.name, arguments: block.arguments });
+              }
+            }
+          }
+          // Also check tool_calls at message level
+          if (Array.isArray(entry.message.tool_calls)) {
+            for (const tc of entry.message.tool_calls) {
+              const args = tc.function?.arguments || tc.arguments || '{}';
+              map.set(tc.id, { name: tc.function?.name || tc.name, arguments: args });
+            }
+          }
+        }
+      }
+      return map;
+    }
+
+    // Find tool result for a tool call ID
+    function findToolResult(entries, toolCallId) {
+      for (const entry of entries) {
+        if (entry.type === 'message' && entry.message?.role === 'toolResult') {
+          if (entry.message.toolCallId === toolCallId) {
+            return entry.message;
+          }
+        }
+      }
+      return null;
+    }
+
+    // Render a tool execution (call + optional result) in pi style
+    function renderToolExecution(tc, entries) {
+      const result = findToolResult(entries, tc.id);
+      const isError = result?.isError || false;
+      const statusClass = result ? (isError ? 'error' : 'success') : 'pending';
+      const args = tc.arguments || {};
+      const name = tc.name || 'unknown';
+
+      // Get result text
+      const getResultText = () => {
+        if (!result) return '';
+        const textBlocks = (result.content || []).filter(c => c.type === 'text');
+        return textBlocks.map(c => c.text || '').join('\n');
+      };
+
+      let html = `<div class="tool-execution ${statusClass}">`;
+
+      // Render based on tool name (like pi template.js)
+      if (name === 'bash') {
+        const command = args.command || '';
+        const timeout = args.timeout;
+        const timeoutSuffix = timeout ? ` (timeout ${timeout}s)` : '';
+        html += `<div class="tool-header"><span class="tool-name">bash</span> <span class="tool-path">$ ${escapeHtml(command || '...')}${timeoutSuffix}</span></div>`;
+        if (result) {
+          const output = getResultText().trim();
+          if (output) {
+            const lines = output.split('\n');
+            const maxLines = 5;
+            const displayLines = lines.slice(0, maxLines);
+            const remaining = lines.length - maxLines;
+            html += '<div class="tool-output">';
+            for (const line of displayLines) {
+              html += `<div>${escapeHtml(line)}</div>`;
+            }
+            if (remaining > 0) {
+              html += `<div class="expand-hint">... (${remaining} more lines)</div>`;
+            }
+            html += '</div>';
+          }
+        }
+      } else if (name === 'read') {
+        const path = args.file_path || args.path || '';
+        const offset = args.offset;
+        const limit = args.limit;
+        let pathDisplay = path;
+        if (offset !== undefined || limit !== undefined) {
+          const start = offset ?? 1;
+          const end = limit !== undefined ? start + limit - 1 : '';
+          pathDisplay += `:${start}${end ? '-' + end : ''}`;
+        }
+        html += `<div class="tool-header"><span class="tool-name">read</span> <span class="tool-path">${escapeHtml(pathDisplay)}</span></div>`;
+        if (result) {
+          const output = getResultText();
+          if (output) {
+            html += '<div class="tool-output"><pre>' + escapeHtml(output) + '</pre></div>';
+          }
+        }
+      } else if (name === 'write') {
+        const path = args.file_path || args.path || '';
+        const content = args.content || '';
+        const lineCount = content.split('\n').length;
+        html += `<div class="tool-header"><span class="tool-name">write</span> <span class="tool-path">${escapeHtml(path)}</span>`;
+        if (lineCount > 1) {
+          html += ` <span class="line-count">(${lineCount} lines)</span>`;
+        }
+        html += '</div>';
+        if (content) {
+          html += '<div class="tool-output"><pre>' + escapeHtml(content) + '</pre></div>';
+        }
+      } else if (name === 'edit') {
+        const path = args.file_path || args.path || '';
+        html += `<div class="tool-header"><span class="tool-name">edit</span> <span class="tool-path">${escapeHtml(path)}</span></div>`;
+        // Show diff if available
+        if (result?.details?.diff) {
+          const diffLines = result.details.diff.split('\n');
+          html += '<div class="tool-diff">';
+          for (const line of diffLines) {
+            const cls = line.match(/^\+/) ? 'diff-added' : line.match(/^-/) ? 'diff-removed' : 'diff-context';
+            html += `<div class="${cls}">${escapeHtml(line)}</div>`;
+          }
+          html += '</div>';
+        } else if (result) {
+          const output = getResultText().trim();
+          if (output) {
+            html += '<div class="tool-output"><pre>' + escapeHtml(output) + '</pre></div>';
+          }
+        }
+      } else if (name === 'ls' || name === 'find' || name === 'grep') {
+        const path = args.path || '.';
+        const pattern = args.pattern || args.glob || '';
+        html += `<div class="tool-header"><span class="tool-name">${name}</span> <span class="tool-path">${escapeHtml(pattern ? `${pattern} in ${path}` : path)}</span></div>`;
+        if (result) {
+          const output = getResultText().trim();
+          if (output) {
+            const lines = output.split('\n');
+            const maxLines = 20;
+            html += '<div class="tool-output">';
+            for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
+              html += `<div>${escapeHtml(lines[i])}</div>`;
+            }
+            if (lines.length > maxLines) {
+              html += `<div class="expand-hint">... (${lines.length - maxLines} more lines)</div>`;
+            }
+            html += '</div>';
+          }
+        }
+      } else {
+        // Generic tool
+        html += `<div class="tool-header"><span class="tool-name">${escapeHtml(name)}</span></div>`;
+        html += '<div class="tool-output"><pre>' + escapeHtml(JSON.stringify(args, null, 2)) + '</pre></div>';
+        if (result) {
+          const output = getResultText();
+          if (output) {
+            html += '<div class="tool-output"><pre>' + escapeHtml(output) + '</pre></div>';
+          }
+        }
+      }
+
+      html += '</div>';
+      return html;
+    }
+
     function renderMessages() {
       if (sessions.length === 0) {
         messagesContainer.innerHTML = '';
@@ -895,11 +1158,15 @@
 
       const session = sessions[activeSessionIndex];
       const proxy = session._proxy || {};
+      const entries = session.entries || [];
+
+      // Build tool call lookup
+      const toolCallMap = buildToolCallMap(entries);
 
       let html = '';
 
       // Render entries
-      session.entries?.forEach((entry) => {
+      entries.forEach((entry) => {
         if (entry.type === 'model_change') {
           html += `
             <div class="model-change" id="entry-${entry.id}">
@@ -912,50 +1179,113 @@
           const usage = entry.message?.usage;
           const model = entry.message?.model;
 
-          let contentHtml = '';
-          if (Array.isArray(content)) {
-            content.forEach(part => {
-              if (part.type === 'text') {
-                contentHtml += `<div class="markdown-content">${escapeHtml(part.text || '')}</div>`;
-              } else if (part.type === 'thinking') {
-                contentHtml += `<div class="thinking-text">${escapeHtml(part.thinking || '')}</div>`;
-              }
-            });
-          } else {
-            contentHtml = `<div class="markdown-content">${escapeHtml(String(content || ''))}</div>`;
-          }
-
           if (role === 'user') {
-            html += `
-              <div class="user-message" id="entry-${entry.id}">
-                ${contentHtml}
-              </div>
-            `;
+            let contentHtml = '';
+            if (Array.isArray(content)) {
+              content.forEach(part => {
+                if (part.type === 'text') {
+                  contentHtml += `<div class="markdown-content">${escapeHtml(part.text || '')}</div>`;
+                }
+              });
+            } else {
+              contentHtml = `<div class="markdown-content">${escapeHtml(String(content || ''))}</div>`;
+            }
+            html += `<div class="user-message" id="entry-${entry.id}">${contentHtml}</div>`;
           } else if (role === 'reasoning') {
-            html += `
-              <div class="reasoning-message" id="entry-${entry.id}">
-                <div class="markdown-content">${contentHtml}</div>
-              </div>
-            `;
+            let contentHtml = '';
+            if (Array.isArray(content)) {
+              content.forEach(part => {
+                if (part.type === 'thinking') {
+                  contentHtml += `<div class="thinking-text">${escapeHtml(part.thinking || '')}</div>`;
+                } else if (part.type === 'text') {
+                  contentHtml += `<div class="markdown-content">${escapeHtml(part.text || '')}</div>`;
+                }
+              });
+            }
+            html += `<div class="reasoning-message" id="entry-${entry.id}">${contentHtml}</div>`;
           } else if (role === 'assistant') {
-            html += `
-              <div class="assistant-message" id="entry-${entry.id}">
-                <div class="assistant-text">
-                  ${contentHtml}
-                </div>
-                ${usage ? `
-                  <div style="padding: 0 var(--line-height); font-size: 10px; color: var(--dim); margin-top: 4px;">
-                    Tokens: ${usage.input || usage.prompt_tokens || 0} in / ${usage.output || usage.completion_tokens || 0} out
-                    ${usage.totalTokens ? `(${usage.totalTokens} total)` : ''}
-                  </div>
-                ` : ''}
-                ${model ? `
-                  <div style="padding: 0 var(--line-height); font-size: 10px; color: var(--dim);">
-                    Model: ${escapeHtml(model)}
-                  </div>
-                ` : ''}
-              </div>
-            `;
+            html += `<div class="assistant-message" id="entry-${entry.id}">`;
+
+            // Check for reasoning field at message level
+            const reasoningText = entry.message?.reasoning;
+            if (reasoningText) {
+              html += `<div class="thinking-text">${escapeHtml(reasoningText)}</div>`;
+            }
+
+            // Render text and thinking content first
+            let hasTextContent = false;
+            if (Array.isArray(content)) {
+              content.forEach(part => {
+                if (part.type === 'text' && part.text?.trim()) {
+                  hasTextContent = true;
+                  html += `<div class="assistant-text markdown-content">${escapeHtml(part.text)}</div>`;
+                } else if (part.type === 'thinking' && part.thinking?.trim()) {
+                  hasTextContent = true;
+                  html += `<div class="thinking-text">${escapeHtml(part.thinking)}</div>`;
+                }
+              });
+            } else if (content && String(content).trim()) {
+              hasTextContent = true;
+              html += `<div class="assistant-text markdown-content">${escapeHtml(String(content))}</div>`;
+            }
+
+            // Render tool calls (from content array)
+            if (Array.isArray(content)) {
+              content.forEach(part => {
+                if (part.type === 'toolCall') {
+                  html += renderToolExecution(part, entries);
+                }
+              });
+            }
+
+            // Also check tool_calls at message level (OpenAI format)
+            if (Array.isArray(entry.message?.tool_calls)) {
+              entry.message.tool_calls.forEach(tc => {
+                const args = tc.function?.arguments || tc.arguments || '{}';
+                html += renderToolExecution({
+                  id: tc.id,
+                  name: tc.function?.name || tc.name,
+                  arguments: typeof args === 'string' ? JSON.parse(args) : args
+                }, entries);
+              });
+            }
+
+            // Show error/aborted status
+            if (entry.message?.stopReason === 'aborted') {
+              html += '<div class="error-text">Aborted</div>';
+            } else if (entry.message?.stopReason === 'error') {
+              html += `<div class="error-text">Error: ${escapeHtml(entry.message?.errorMessage || 'Unknown error')}</div>`;
+            }
+
+            // Usage and model info
+            if (usage) {
+              html += `<div style="padding: 0 var(--line-height); font-size: 10px; color: var(--dim); margin-top: 4px;">
+                Tokens: ${usage.input || usage.prompt_tokens || 0} in / ${usage.output || usage.completion_tokens || 0} out
+                ${usage.totalTokens ? `(${usage.totalTokens} total)` : ''}
+              </div>`;
+            }
+            if (model) {
+              html += `<div style="padding: 0 var(--line-height); font-size: 10px; color: var(--dim);">Model: ${escapeHtml(model)}</div>`;
+            }
+
+            html += '</div>';
+          } else if (role === 'toolResult') {
+            // Tool results are rendered inline with their tool calls, skip here
+            // But if we don't have a matching tool call, show it anyway
+            const toolCallId = entry.message?.toolCallId;
+            if (toolCallId && !toolCallMap.has(toolCallId)) {
+              const isError = entry.message?.isError;
+              const statusClass = isError ? 'error' : 'success';
+              const toolName = entry.message?.toolName || 'tool';
+              html += `<div class="tool-execution ${statusClass}" id="entry-${entry.id}">`;
+              html += `<div class="tool-header"><span class="tool-name">${escapeHtml(toolName)}</span> <span class="tool-path">(orphaned result)</span></div>`;
+              const content = entry.message?.content || [];
+              const textBlocks = content.filter(c => c.type === 'text');
+              if (textBlocks.length > 0) {
+                html += '<div class="tool-output"><pre>' + escapeHtml(textBlocks.map(c => c.text || '').join('\n')) + '</pre></div>';
+              }
+              html += '</div>';
+            }
           }
         } else if (entry.type === 'error') {
           html += `
