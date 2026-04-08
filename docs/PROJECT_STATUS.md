@@ -91,6 +91,13 @@
   - Added comprehensive test coverage for parameters action handling
   - Applied actions log as `set:parameters:<param1,param2,...>` when parameters are set
   - Updated README.md with detailed documentation and parameter reference table
+- Added preprocessing feature for message content replacement:
+  - New `preprocessing.promptReplaces` config section for regex-based content matching
+  - Checks if all lines in user message content match configured patterns
+  - If all lines match, replaces content while preserving JSON blocks
+  - Works on `messages[].content` (role: user), `prompt`, and `input` fields
+  - Added 28 unit tests for preprocessing module
+  - Updated README.md with preprocessing documentation
 
 ---
 

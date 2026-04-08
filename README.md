@@ -8,6 +8,7 @@ It listens on `11435` (default), forwards traffic to `127.0.0.1:11434`, supports
 - Transparent reverse proxy for Ollama endpoints
 - Streaming-safe forwarding for request/response bodies
 - Configurable category matching via JSON config
+- Preprocessing: replace user message content based on regex patterns before category matching
 - Configurable actions per category:
   - replace `model`
   - set `options.num_ctx`
@@ -51,7 +52,6 @@ A web UI for viewing session logs.
 - Pi-compatible session format (tree structure with entries)
 - `src/pi-session-format.js` - Transforms request/response to to pi format
 - `src/session-viewer-server.js` - Web server for viewing sessions
-- `src/session-viewer.html` - Standalone HTML viewer
 - `sample-session-viewer.html` - Demo HTML with sample sessions
 
 - `tests/session-viewer.test.js` - Integration tests for session viewer server
@@ -116,6 +116,62 @@ Example config:
   ]
 }
 ```
+
+### Preprocessing
+
+The `preprocessing` section allows you to replace user message content before category matching is applied. This is useful for normalizing or simplifying complex prompts.
+
+**How it works:**
+1. For each user message (`role: "user"`), check if all non-JSON lines match **all** of the configured regex patterns
+2. If all lines match all patterns, replace the non-JSON content with the configured replacement lines
+3. JSON blocks (lines starting with `{` or `[`) are preserved and appended after the replacement
+
+**Configuration:**
+```json
+{
+  "preprocessing": {
+    "promptReplaces": [
+      {
+        "id": "replace_messy_summarization",
+        "match": [
+          "^(Antworte|Nutze|1\\)).*"
+        ],
+        "replace": [
+          "== Summarization Request ==",
+          "Summarize the conversation concisely and precisely in German."
+        ]
+      }
+    ]
+  },
+  "categories": [...]
+}
+```
+
+**Matching behavior:**
+- Each line in the user message content must match **all** patterns in `match[]`
+- This means a single broad pattern (or multiple patterns that all lines satisfy) is typically used
+- If **all** non-JSON lines match all patterns, the content is replaced
+- Lines starting with `{` or `[` are treated as JSON and preserved unchanged
+- Empty lines always match
+- Only the first matching rule is applied per message
+
+**Example transformation:**
+
+Before (user message content):
+```
+Antworte sachlich, präzise, zielführend und kurz.
+Nutze als Antwort-Sprache bitte ausschließlich "German".
+{"context": "some data"}
+```
+
+After preprocessing (with pattern `^(Antworte|Nutze).*$`):
+```
+== Summarization Request ==
+Summarize the conversation concisely and precisely in German.
+{"context": "some data"}
+```
+
+The preprocessing also works on `prompt` and `input` fields for non-chat endpoints.
 
 ### Model parameters via `actions.parameters`
 

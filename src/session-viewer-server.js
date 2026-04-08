@@ -122,7 +122,10 @@ function getSessionTokenUsage(session) {
 }
 
 // Get list of all session files with metadata
-async function listSessions() {
+async function listSessions(options = {}) {
+  const page = options.page || 1;
+  const pageSize = options.pageSize || 25;
+
   const sessionDir = getSessionLogDir();
 
   try {
@@ -172,10 +175,22 @@ async function listSessions() {
       return tb - ta;
     });
 
-    return sessions;
+    const total = sessions.length;
+    const totalPages = Math.ceil(total / pageSize) || 1;
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedSessions = sessions.slice(startIndex, endIndex);
+
+    return {
+      sessions: paginatedSessions,
+      page,
+      pageSize,
+      total,
+      totalPages,
+    };
   } catch (error) {
     if (error.code === 'ENOENT') {
-      return [];
+      return { sessions: [], page: 1, pageSize, total: 0, totalPages: 1 };
     }
     throw error;
   }
@@ -387,6 +402,11 @@ function getViewerHtml() {
 
     .info-value {
       color: var(--text);
+      flex: 1;
+      min-width: 0;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      white-space: pre-line;
     }
 
     .info-value.success { color: var(--success); }
@@ -582,6 +602,42 @@ function getViewerHtml() {
       word-break: break-all;
     }
 
+    /* Pagination */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 0;
+      margin-top: 8px;
+    }
+
+    .page-btn {
+      padding: 6px 16px;
+      background: var(--container-bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 11px;
+      font-family: inherit;
+    }
+
+    .page-btn:hover:not(:disabled) {
+      background: var(--selectedBg);
+      border-color: var(--borderAccent);
+    }
+
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .page-info {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
     /* Responsive */
     @media (max-width: 800px) {
       .session-item, .list-header {
@@ -613,6 +669,10 @@ function getViewerHtml() {
       currentIndex: null,
       loading: false,
       error: null,
+      page: 1,
+      pageSize: 25,
+      totalSessions: 0,
+      totalPages: 0,
     };
 
     async function fetchJson(url) {
@@ -624,14 +684,17 @@ function getViewerHtml() {
       return res.json();
     }
 
-    async function loadSessions() {
+    async function loadSessions(page = 1) {
       state.loading = true;
       state.error = null;
       render();
 
       try {
-        const data = await fetchJson('/api/sessions');
+        const data = await fetchJson('/api/sessions?page=' + page);
         state.sessions = data.sessions;
+        state.page = data.page;
+        state.totalSessions = data.total;
+        state.totalPages = data.totalPages;
         state.view = 'list';
       } catch (err) {
         state.error = err.message;
@@ -639,6 +702,10 @@ function getViewerHtml() {
         state.loading = false;
         render();
       }
+    }
+
+    function changePage(delta) {
+      loadSessions(state.page + delta);
     }
 
     function showListView() {
@@ -935,7 +1002,7 @@ function getViewerHtml() {
       }
 
       let html = \`
-        <h1>Session Viewer (\${state.sessions.length} sessions)</h1>
+        <h1>Session Viewer (\${state.totalSessions} sessions)</h1>
         <div class="list-header">
           <span>Time</span>
           <span>Source</span>
@@ -964,6 +1031,12 @@ function getViewerHtml() {
       }
 
       html += '</div>';
+
+      html += '<div class="pagination">';
+      html += '<button class="page-btn" onclick="changePage(-1)" ' + (state.page <= 1 ? 'disabled' : '') + '>Previous</button>';
+      html += '<span class="page-info">Page ' + state.page + ' of ' + state.totalPages + '</span>';
+      html += '<button class="page-btn" onclick="changePage(1)" ' + (state.page >= state.totalPages ? 'disabled' : '') + '>Next</button>';
+      html += '</div>';
       app.innerHTML = html;
     }
 
@@ -986,7 +1059,7 @@ function getViewerHtml() {
               <div class="info-item"><span class="info-label">Tokens:</span><span class="info-value">\${escapeHtml(formatTokenUsage(tokenUsage.inputTokens, tokenUsage.outputTokens))} (in/out)</span></div>
               <div class="info-item"><span class="info-label">Request Time:</span><span class="info-value">\${escapeHtml(formatDuration(Number(proxy.durationMs)))}</span></div>
               <div class="info-item"><span class="info-label">Category:</span><span class="info-value">\${escapeHtml(proxy.matchedCategory || 'none')}</span></div>
-              <div class="info-item"><span class="info-label">Actions:</span><span class="info-value">\${(proxy.appliedActions || []).map(a => escapeHtml(a)).join(', ') || 'none'}</span></div>
+              <div class="info-item"><span class="info-label">Actions:</span><span class="info-value">\${(proxy.appliedActions || []).length ? (proxy.appliedActions || []).map(a => escapeHtml(a)).join(',\\n') : 'none'}</span></div>
               <div class="info-item">
                 <span class="info-label">Status:</span>
                 <span class="info-value \${proxy.statusCode >= 400 ? 'error' : 'success'}">\${proxy.statusCode || 'unknown'}</span>
@@ -1180,11 +1253,16 @@ async function handleRequest(req, res) {
     return;
   }
 
+  const pageParam = parseInt(url.searchParams.get('page') || '1', 10);
+  const pageSizeParam = parseInt(url.searchParams.get('pageSize') || '25', 10);
+  const requestedPage = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+  const requestedPageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0 ? Math.min(pageSizeParam, 100) : 25;
+
   // API routes
   if (url.pathname === '/api/sessions') {
     try {
-      const sessions = await listSessions();
-      sendJson(res, 200, { sessions });
+      const sessions = await listSessions({ page: requestedPage, pageSize: requestedPageSize });
+      sendJson(res, 200, sessions);
     } catch (error) {
       sendError(res, 500, error.message);
     }

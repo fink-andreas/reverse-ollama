@@ -19,6 +19,10 @@ The reverse proxy:
     - removes duplicate prefix patterns defined in `config/deduplication.json` (keeps first occurrence, removes subsequent appearances)
     - prefix patterns are text blocks that should only appear once at the beginning of a text field
 - provides structured logs
+- supports preprocessing of user message content:
+  - regex-based pattern matching on message lines
+  - content replacement when all lines match patterns
+  - preserves JSON blocks during replacement
 - keeps payload content out of normal logs by default
 - supports debug-only request/response payload logging controlled by environment flags
 - supports configurable upstream timeout via environment variable (`UPSTREAM_TIMEOUT_MS`) with default `60000`

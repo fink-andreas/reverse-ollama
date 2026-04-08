@@ -371,5 +371,5 @@ The MVP is done when:
 ### Reasoning Role Support
 - Added "reasoning" role in session viewer for displaying `message.reasoning` content separately from assistant responses
   - `pi-session-format.js` extracts `message.reasoning` field and creates separate `role: "reasoning"` entry
-  - `session-viewer.html` renders reasoning entries with distinct styling (italic, muted, warning-colored left border)
+  - `session-viewer-server.js` embeds HTML that renders reasoning entries with distinct styling (italic, muted, warning-colored left border)
   - Added unit tests for reasoning entry generation (`tests/pi-session-format.test.js`)

@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import { request as undiciRequest } from 'undici';
 import { matchRequestCategory } from './matcher.js';
 import { applyActions } from './transform.js';
+import { applyPreprocessing } from './preprocessing.js';
 import { appendSessionLogEntry, isSessionLogEnabled } from './session-log.js';
 import { buildPiSession } from './pi-session-format.js';
 
@@ -258,6 +259,19 @@ export async function proxyRequest({ req, res, logger, config }) {
         requestBodyObject = parsed.value;
       }
 
+      // Apply preprocessing (message content replacement) before category matching
+      let appliedPreprocessingRules = [];
+      if (requestBodyObject && typeof requestBodyObject === 'object' && config?.preprocessing) {
+        const preprocessingResult = applyPreprocessing(requestBodyObject, config.preprocessing);
+        if (preprocessingResult.appliedRules.length > 0) {
+          requestBodyObject = preprocessingResult.requestBody;
+          appliedPreprocessingRules = preprocessingResult.appliedRules;
+          rawBodyText = JSON.stringify(requestBodyObject);
+          // Add preprocessing to appliedActions for logging
+          appliedActions = appliedPreprocessingRules.map((rule) => `preprocessing:${rule}`);
+        }
+      }
+
       matchedCategory = matchRequestCategory({
         categories,
         requestPath,
@@ -273,7 +287,8 @@ export async function proxyRequest({ req, res, logger, config }) {
           category: matchedCategory,
         });
         requestBodyObject = transformed.requestBody;
-        appliedActions = transformed.appliedActions;
+        // Prepend preprocessing actions, then add category actions
+        appliedActions = [...appliedActions, ...transformed.appliedActions];
         outgoingBuffer = Buffer.from(JSON.stringify(requestBodyObject), 'utf8');
       }
 
@@ -289,6 +304,7 @@ export async function proxyRequest({ req, res, logger, config }) {
           path: requestPath,
           matchedCategory: matchedCategory?.name || null,
           appliedActions,
+          appliedPreprocessingRules,
         },
         'request classification complete',
       );

@@ -11,6 +11,33 @@ const schema = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    preprocessing: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        promptReplaces: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id', 'match', 'replace'],
+            properties: {
+              id: { type: 'string', minLength: 1 },
+              match: {
+                type: 'array',
+                minItems: 1,
+                items: { type: 'string', minLength: 1 },
+              },
+              replace: {
+                type: 'array',
+                minItems: 1,
+                items: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
     categories: {
       type: 'array',
       default: [],
@@ -70,8 +97,40 @@ function compileRegex(pattern, flags, categoryName, fieldName) {
   }
 }
 
-export function normalizeConfig(config) {
+function compilePreprocessingPatterns(preprocessing, configPath) {
+  if (!preprocessing || !Array.isArray(preprocessing.promptReplaces)) {
+    return { promptReplaces: [] };
+  }
+
   return {
+    promptReplaces: preprocessing.promptReplaces.map((rule, index) => {
+      const ruleId = rule.id || `rule-${index}`;
+      const compiledPatterns = [];
+
+      for (let i = 0; i < rule.match.length; i++) {
+        const pattern = rule.match[i];
+        try {
+          compiledPatterns.push(new RegExp(pattern));
+        } catch (error) {
+          throw new Error(
+            `Invalid regex in preprocessing.promptReplaces[${index}].match[${i}] (${ruleId}): ${error.message}`
+          );
+        }
+      }
+
+      return {
+        ...rule,
+        compiledPatterns,
+      };
+    }),
+  };
+}
+
+export function normalizeConfig(config) {
+  const normalizedPreprocessing = compilePreprocessingPatterns(config.preprocessing, 'config');
+
+  return {
+    preprocessing: normalizedPreprocessing,
     categories: config.categories.map((category) => {
       const flags = category.match?.flags || '';
       const compiledMatchers = {
