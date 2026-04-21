@@ -5,6 +5,15 @@ import { applyActions } from './transform.js';
 import { applyPreprocessing } from './preprocessing.js';
 import { appendSessionLogEntry, isSessionLogEnabled } from './session-log.js';
 import { buildPiSession } from './pi-session-format.js';
+import {
+  isRequestCacheEnabled,
+  computeRequestHash,
+  readCacheEntry,
+  writeCacheEntry,
+  serveCachedResponse,
+  filterReplayableHeaders,
+  shouldCacheResponse,
+} from './request-cache.js';
 
 const DEFAULT_UPSTREAM = 'http://127.0.0.1:11434';
 const HOP_BY_HOP_HEADERS = new Set([
@@ -206,8 +215,11 @@ export async function proxyRequest({ req, res, logger, config }) {
   let sessionStatusCode = null;
   let sessionError = null;
   let sessionSource = 'upstream';
+  let sessionCacheHit = false;
+  let sessionCacheEntry = null;
   const payloadLoggingEnabled = shouldLogPayloads(logger);
   const payloadLogMaxBytes = payloadLoggingEnabled ? getPayloadLogMaxBytes() : 0;
+  const requestCacheEnabled = isRequestCacheEnabled();
 
   const logSessionPair = async () => {
     if (!sessionLogEnabled) {
@@ -228,6 +240,7 @@ export async function proxyRequest({ req, res, logger, config }) {
         statusCode: sessionStatusCode,
         error: sessionError,
         durationMs: Date.now() - requestStartMs,
+        cacheHit: sessionCacheHit,
       });
 
       await appendSessionLogEntry(piSession, { source: requestSource });
@@ -327,6 +340,49 @@ export async function proxyRequest({ req, res, logger, config }) {
           'request payload debug',
         );
       }
+
+      // Cache lookup: check cache after all transforms are applied
+      if (requestCacheEnabled && Buffer.isBuffer(outgoingBuffer)) {
+        const cacheHash = computeRequestHash(outgoingBuffer);
+        const cachedEntry = await readCacheEntry(cacheHash);
+
+        if (cachedEntry !== null) {
+          // Cache hit — serve from cache, skip upstream
+          sessionCacheHit = true;
+          sessionSource = 'cache';
+          sessionStatusCode = cachedEntry.statusCode;
+          sessionResponseBuffer = Buffer.from(cachedEntry.responseBody, 'utf8');
+
+          logger.info(
+            {
+              path: requestPath,
+              matchedCategory: matchedCategory?.name || null,
+              appliedActions,
+              appliedPreprocessingRules,
+              cacheHash,
+            },
+            'cache hit — serving cached response (15s delay)',
+          );
+
+          // Simulate thinking time by delaying 15 seconds before serving cached response
+          await new Promise((resolve) => setTimeout(resolve, 15000));
+
+          serveCachedResponse(res, cachedEntry);
+          await logSessionPair();
+          return;
+        }
+
+        // Cache miss — store metadata for cache write after upstream response
+        sessionCacheEntry = { hash: cacheHash, requestBody: bufferToUtf8(outgoingBuffer) };
+
+        logger.debug(
+          {
+            path: requestPath,
+            cacheHash,
+          },
+          'cache miss — proceeding to upstream',
+        );
+      }
     } else if (sessionLogEnabled) {
       const method = (req.method || 'GET').toUpperCase();
       if (method !== 'GET' && method !== 'HEAD') {
@@ -359,8 +415,9 @@ export async function proxyRequest({ req, res, logger, config }) {
     clearTimeout(timeout);
 
     sessionStatusCode = upstreamResponse.statusCode;
+    const upstreamHeaders = upstreamResponse.headers;
 
-    res.writeHead(upstreamResponse.statusCode, filterResponseHeaders(upstreamResponse.headers));
+    res.writeHead(upstreamResponse.statusCode, filterResponseHeaders(upstreamHeaders));
 
     const responseBody = toNodeReadable(upstreamResponse.body);
     if (!responseBody) {
@@ -399,10 +456,31 @@ export async function proxyRequest({ req, res, logger, config }) {
       });
     }
 
-    responseBody.on('end', () => {
+    responseBody.on('end', async () => {
       if (sessionLogEnabled) {
         sessionResponseBuffer = Buffer.concat(responseChunks);
-        void logSessionPair();
+      }
+
+      // Persist response to cache if eligible (non-streaming, successful JSON)
+      if (
+        requestCacheEnabled &&
+        sessionCacheEntry !== null &&
+        shouldCacheResponse(requestPath, requestBodyObject, upstreamResponse.statusCode, upstreamHeaders)
+      ) {
+        const responseText = Buffer.concat(responseChunks).toString('utf8');
+        void writeCacheEntry(sessionCacheEntry.hash, {
+          requestBody: sessionCacheEntry.requestBody,
+          statusCode: upstreamResponse.statusCode,
+          responseHeaders: filterReplayableHeaders(upstreamHeaders),
+          responseBody: responseText,
+          cacheSource: 'upstream',
+        })
+          .then(() => {
+            logger.debug({ cacheHash: sessionCacheEntry.hash }, 'response cached');
+          })
+          .catch((err) => {
+            logger.warn({ err, cacheHash: sessionCacheEntry.hash }, 'failed to write cache entry');
+          });
       }
 
       if (payloadLoggingEnabled) {
@@ -420,6 +498,8 @@ export async function proxyRequest({ req, res, logger, config }) {
           'response payload debug',
         );
       }
+
+      await logSessionPair();
     });
 
     responseBody.on('error', (error) => {

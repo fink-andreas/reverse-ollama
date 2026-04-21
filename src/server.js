@@ -6,6 +6,8 @@ import { logger as defaultLogger } from './logger.js';
 import { loadConfig } from './config.js';
 import { proxyRequest } from './proxy.js';
 import { ensureDeduplicationConfigLoaded, resetDeduplicationConfig } from './transform.js';
+import { startCacheCleanup, isRequestCacheEnabled } from './request-cache.js';
+import { startSessionCleanup, isSessionLogEnabled } from './session-log.js';
 
 const DEFAULT_HOST = process.env.HOST || '0.0.0.0';
 const DEFAULT_PORT = Number(process.env.PORT || 11435);
@@ -21,6 +23,16 @@ export async function createReverseOllamaServer({
   // Load deduplication config
   await ensureDeduplicationConfigLoaded();
   logger.info('deduplication configuration loaded');
+
+  // Start background cache cleanup if cache is enabled
+  if (isRequestCacheEnabled()) {
+    startCacheCleanup(logger);
+  }
+
+  // Start background session cleanup if session logging is enabled
+  if (isSessionLogEnabled()) {
+    startSessionCleanup(logger);
+  }
 
   const server = http.createServer(async (req, res) => {
     const requestId = randomUUID();

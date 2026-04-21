@@ -363,13 +363,11 @@ The MVP is done when:
 - Updated viewer detail message rendering to preserve line breaks using plain escaped text (no Markdown-to-HTML conversion)
 - Added optional transformation action `actions.deduplication` to remove duplicate instruction lines in request text fields (`prompt`, `input`, `messages[].content`)
 - Refined deduplication behavior with a generic minimum-impact threshold (default 60 affected characters) instead of brittle content-specific handling
+- Added "reasoning" role support in session viewer for `message.reasoning` content (separate entry, distinct styling)
+- Added optional request/response cache (`REQUEST_CACHE_DIR`, SHA-256 hash of request body, 4-hour TTL, no streaming, graceful failures, cache-hit indicator in viewer)
 
 ---
 
 ## Post-M11 Extensions (in progress)
 
-### Reasoning Role Support
-- Added "reasoning" role in session viewer for displaying `message.reasoning` content separately from assistant responses
-  - `pi-session-format.js` extracts `message.reasoning` field and creates separate `role: "reasoning"` entry
-  - `session-viewer-server.js` embeds HTML that renders reasoning entries with distinct styling (italic, muted, warning-colored left border)
-  - Added unit tests for reasoning entry generation (`tests/pi-session-format.test.js`)
+(No extensions currently in progress)

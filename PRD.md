@@ -27,13 +27,21 @@ The reverse proxy:
 - supports debug-only request/response payload logging controlled by environment flags
 - supports configurable upstream timeout via environment variable (`UPSTREAM_TIMEOUT_MS`) with default `60000`
 - supports optional session logging that stores full request/response pairs as JSONL files on disk (Debian default: `/var/log/reverse-ollama/sessions`) using source-aware filenames with UTC timestamp granularity down to milliseconds (prefer `x-forwarded-for`, then `x-forwarded`, then socket IP)
+- session files are automatically cleaned up after 48 hours (configurable via `SESSION_CLEANUP_MAX_AGE_HOURS`) to prevent disk space accumulation; cleanup runs on startup and periodically (configurable via `SESSION_CLEANUP_INTERVAL_MS`, default 1 hour)
 - session JSONL entries use a pi-compatible session structure (header + entries tree + leafId) while preserving raw proxy request/response metadata under `_proxy`
+- supports optional request/response caching for identical JSON request bodies
+  - cache storage directory is configurable via `REQUEST_CACHE_DIR` and defaults to Debian-friendly path `/var/cache/reverse-ollama/request-cache`
+  - cache entries use a deterministic hash of the outgoing request body in the filename (e.g. SHA-256) and store both the request body and the full cached response in the same file
+  - cache lookup happens before dispatching to Ollama; on a hash match with a still-valid entry, the proxy returns the cached response instead of calling the upstream LLM
+  - cache entries expire after 4 hours
+  - cache metadata must record whether the response came from cache or upstream so it can be surfaced in logs/session data
 - includes a built-in session viewer web server for browsing stored sessions
   - viewer host is configurable via `SESSION_VIEWER_HOST` (default: `127.0.0.1`, set `0.0.0.0` for external access)
   - viewer port is configurable via `SESSION_VIEWER_PORT` (default: `3000`)
   - mandatory basic auth with username `admin` and password from `SESSION_VIEWER_PASSWORD` (viewer must not start without password)
   - first screen lists sessions; selecting a session shows details and a back button
   - session list columns include `Tokens` (in/out per request) and `Time` (request-to-response duration)
+  - session viewer list must visibly mark cache hits
   - session detail header also shows `Tokens` (in/out) and request `Time`
   - session detail message bodies preserve line breaks and are rendered as plain escaped text (no Markdown-to-HTML conversion)
   - browser back/forward navigation must mirror in-app navigation between list and detail views

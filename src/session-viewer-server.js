@@ -161,6 +161,7 @@ async function listSessions(options = {}) {
             inputTokens: tokenUsage.inputTokens,
             outputTokens: tokenUsage.outputTokens,
             durationMs: Number.isFinite(Number(proxy.durationMs)) ? Number(proxy.durationMs) : null,
+            cacheHit: proxy.cacheHit === true,
           });
         }
       } catch {
@@ -298,7 +299,7 @@ function getViewerHtml() {
 
     .session-item {
       display: grid;
-      grid-template-columns: 180px 120px 1fr 70px 90px 70px 60px;
+      grid-template-columns: 180px 120px 1fr 70px 90px 70px 60px 70px;
       gap: 12px;
       padding: 8px 12px;
       background: var(--container-bg);
@@ -310,6 +311,11 @@ function getViewerHtml() {
 
     .session-item:hover {
       background: var(--selectedBg);
+    }
+
+    .session-cache {
+      color: var(--success);
+      font-weight: bold;
     }
 
     .session-time {
@@ -1011,6 +1017,7 @@ function getViewerHtml() {
           <span>Tokens</span>
           <span>Time</span>
           <span>Entries</span>
+          <span>Cache</span>
         </div>
         <div class="session-list">
       \`;
@@ -1026,6 +1033,7 @@ function getViewerHtml() {
             <span class="session-tokens">\${escapeHtml(formatTokenUsage(s.inputTokens, s.outputTokens))}</span>
             <span class="session-duration">\${escapeHtml(formatDuration(s.durationMs))}</span>
             <span class="session-entries">\${s.entryCount}</span>
+            <span class="session-cache">\${s.cacheHit ? 'HIT' : ''}</span>
           </div>
         \`;
       }
@@ -1063,6 +1071,10 @@ function getViewerHtml() {
               <div class="info-item">
                 <span class="info-label">Status:</span>
                 <span class="info-value \${proxy.statusCode >= 400 ? 'error' : 'success'}">\${proxy.statusCode || 'unknown'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Cache:</span>
+                <span class="info-value \${proxy.cacheHit ? 'success' : ''}">\${proxy.cacheHit ? 'HIT' : 'MISS'}</span>
               </div>
             </div>
           </div>

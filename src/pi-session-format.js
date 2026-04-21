@@ -423,6 +423,7 @@ export function buildPiSession({
   statusCode,
   error,
   durationMs = null,
+  cacheHit = false,
   timestamp = new Date(),
 }) {
   const sessionId = randomUUID();
@@ -595,6 +596,7 @@ export function buildPiSession({
     appliedActions,
     statusCode,
     durationMs,
+    cacheHit,
     timestamp: now,
     request: {
       incomingBody: incomingBody,

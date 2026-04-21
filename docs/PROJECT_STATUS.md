@@ -3,9 +3,10 @@
 ## Current Progress
 
 ### Overall status
-- Planning completed
+- Planning completed for main proxy/viewer milestones
 - Implementation completed for all main milestones
 - Test suite passing
+- Request/response caching fully implemented
 
 ### Completed
 - Read and reviewed `PRD.md`
@@ -98,6 +99,11 @@
   - Works on `messages[].content` (role: user), `prompt`, and `input` fields
   - Added 28 unit tests for preprocessing module
   - Updated README.md with preprocessing documentation
+- Added automatic session file cleanup:
+  - Session files older than 48 hours are automatically deleted (configurable via `SESSION_CLEANUP_MAX_AGE_HOURS`)
+  - Cleanup runs immediately on startup and periodically (configurable via `SESSION_CLEANUP_INTERVAL_MS`, default 1 hour)
+  - Added 18 unit tests for session cleanup module
+  - Logs cleanup activity (files deleted, errors encountered)
 
 ---
 
@@ -122,19 +128,28 @@
 ## Current Focus
 - All main milestones are complete.
 - Session logging now emits pi-compatible sessions and includes a web session viewer with optional auth.
-- Current focus is documentation polish and operational hardening for the new viewer flow.
+- Request/response caching is fully implemented and tested.
+- Session file cleanup is now implemented and tested.
+- Current focus: documentation polish and remaining optional hardening.
 
 ---
 
 ## Next Steps (optional)
-1. Add CI workflow for tests and linting
-2. Add request/response metrics export (Prometheus)
-3. Add benchmark script for streaming latency/throughput
-4. Add viewer pagination/filtering for large session directories
-5. Add hot config reload by file watcher (optional)
+1. [Done] Design cache entry format and cache directory handling (`REQUEST_CACHE_DIR`, default `/var/cache/reverse-ollama/request-cache`)
+2. [Done] Implement request-body hashing and 4-hour TTL cache validation in proxy flow
+3. [Done] Persist cache source metadata into session logs/pi session `_proxy`
+4. [Done] Mark cache hits in session viewer list UI
+5. [Done] Add automated tests for cache hit/miss/expiry behavior
+6. [Done] Implement automatic session file cleanup after configurable age (default 48 hours)
+7. Add CI workflow for tests and linting
+8. Add request/response metrics export (Prometheus)
+9. Add benchmark script for streaming latency/throughput
+10. Add viewer pagination/filtering for large session directories
+11. Add hot config reload by file watcher (optional)
 
 ---
 
 ## Notes
 - Local port `11435` may be occupied on this host; override with `PORT` for local runs.
+- Request/response cache planning has been added to the project docs; implementation has not started yet.
 - Keep this file updated when optional hardening work starts.

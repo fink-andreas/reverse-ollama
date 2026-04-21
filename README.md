@@ -38,6 +38,9 @@ Environment variables:
 - `OLLAMA_UPSTREAM` (default `http://127.0.0.1:11434`)
 - `REVERSE_OLLAMA_CONFIG` (default `config/categories.json`)
 - `UPSTREAM_TIMEOUT_MS` (default `60000`)
+- `REQUEST_CACHE_ENABLED` (default `true`)
+- `REQUEST_CACHE_DIR` (default `/var/cache/reverse-ollama/request-cache`)
+- `REQUEST_CACHE_TTL_MS` (default `14400000` = 4 hours)
 ## Session Viewer Web Server
 
 A web UI for viewing session logs.
@@ -67,6 +70,20 @@ When `SESSION_LOG_ENABLED=true`, the proxy appends JSONL entries with full reque
 3. socket remote address
 
 Each line includes request metadata (including `source`), matched category/actions, incoming/outgoing request bodies, and response status/body.
+
+### Request/Response Cache
+When enabled, the proxy caches LLM responses to avoid repeated upstream calls for identical request bodies.
+
+- **Cache key**: SHA-256 of the final outgoing JSON request body (after all preprocessing/transforms)
+- **Cache file**: `<hash>.json` in `REQUEST_CACHE_DIR`
+- **Eligibility**: Non-streaming JSON 200 responses only (skips `stream:true` requests and SSE responses)
+- **TTL**: 4 hours by default (`REQUEST_CACHE_TTL_MS`)
+- **Atomic writes**: First write wins; concurrent writes use temp file + rename
+- **Graceful degradation**: Cache write failures are logged as warnings and never crash a request
+- **Cache hit** — request is served from cache, upstream is not called, `cache hit` is logged
+- **Cache miss** — request is forwarded upstream; response is persisted if eligible
+- **Background cleanup**: Expired entries are removed every 1 hour
+- **Session logs**: `cacheHit: true` is recorded in pi session `_proxy` metadata; session viewer shows `HIT` badge
 
 ## Configuration
 Default config path: `config/categories.json`
