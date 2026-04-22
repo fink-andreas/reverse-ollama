@@ -5,6 +5,7 @@ import { applyActions } from './transform.js';
 import { applyPreprocessing } from './preprocessing.js';
 import { appendSessionLogEntry, isSessionLogEnabled } from './session-log.js';
 import { buildPiSession } from './pi-session-format.js';
+import { checkSkipPatterns } from './session-skip.js';
 import {
   isRequestCacheEnabled,
   computeRequestHash,
@@ -270,6 +271,48 @@ export async function proxyRequest({ req, res, logger, config }) {
         }
 
         requestBodyObject = parsed.value;
+      }
+
+      // Session skip check: bypass all session infrastructure if patterns match
+      const sessionLogSkip = config?.sessionLogSkip;
+      if (sessionLogSkip && sessionLogSkip.length > 0) {
+        const skipResult = checkSkipPatterns(requestBodyObject, sessionLogSkip);
+        if (skipResult.skipped) {
+          if (skipResult.logSkipped) {
+            logger.info(
+              { path: requestPath },
+              'request skipped session logging (pi-system match)',
+            );
+          }
+
+          // Forward directly to upstream without any transforms, caching, or session logging
+          // Use the already-read rawBuffer (body was consumed earlier in this try block)
+          const contentLength = rawBuffer.byteLength;
+
+          const upstreamRequestPromise = undiciRequest(upstreamUrl, {
+            method: req.method,
+            headers: filterRequestHeaders(req.headers, contentLength),
+            body: rawBuffer,
+            signal: abortController.signal,
+          });
+
+          let timeout;
+          const timeoutPromise = new Promise((_, reject) => {
+            timeout = setTimeout(() => {
+              abortController.abort('upstream timeout');
+              reject(new Error('UPSTREAM_TIMEOUT'));
+            }, upstreamTimeoutMs);
+            timeout.unref();
+          });
+
+          const upstreamResponse = await Promise.race([upstreamRequestPromise, timeoutPromise]);
+          clearTimeout(timeout);
+
+          res.writeHead(upstreamResponse.statusCode, filterResponseHeaders(upstreamResponse.headers));
+          upstreamResponse.body.pipe(res);
+
+          return;
+        }
       }
 
       // Apply preprocessing (message content replacement) before category matching

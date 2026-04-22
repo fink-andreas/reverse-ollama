@@ -104,6 +104,13 @@
   - Cleanup runs immediately on startup and periodically (configurable via `SESSION_CLEANUP_INTERVAL_MS`, default 1 hour)
   - Added 18 unit tests for session cleanup module
   - Logs cleanup activity (files deleted, errors encountered)
+- Added session skip feature:
+  - New `sessionLogSkip` config section for bypassing session logging when requests match configured patterns
+  - Checks `messages[].role === 'system'` and `messages[].content.startsWith(pattern)` for each pattern
+  - Skips all session logging (and cache) when all patterns match
+  - Optional `log: true` for info-level logging when skipped
+  - Runs before preprocessing, independent of category matching
+  - Added 20 unit tests for session-skip detection module
 
 ---
 
@@ -130,7 +137,8 @@
 - Session logging now emits pi-compatible sessions and includes a web session viewer with optional auth.
 - Request/response caching is fully implemented and tested.
 - Session file cleanup is now implemented and tested.
-- Current focus: documentation polish and remaining optional hardening.
+- Session skip feature is complete.
+- Current focus: reviewing and fixing 3 preprocessing test regressions (existing test behavior change unrelated to session-skip implementation).
 
 ---
 
@@ -141,7 +149,9 @@
 4. [Done] Mark cache hits in session viewer list UI
 5. [Done] Add automated tests for cache hit/miss/expiry behavior
 6. [Done] Implement automatic session file cleanup after configurable age (default 48 hours)
-7. Add CI workflow for tests and linting
+7. [Done] Implement session skip feature (config schema, detection module, proxy integration)
+8. Fix 3 preprocessing test regressions (unrelated to session-skip, pre-existing)
+9. Add CI workflow for tests and linting
 8. Add request/response metrics export (Prometheus)
 9. Add benchmark script for streaming latency/throughput
 10. Add viewer pagination/filtering for large session directories

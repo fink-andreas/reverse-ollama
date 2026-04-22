@@ -134,6 +134,30 @@ Example config:
 }
 ```
 
+### Session Skip
+
+Requests can bypass all session logging infrastructure by matching a `sessionLogSkip` pattern in system messages.
+
+When a request matches all configured patterns, the proxy forwards it directly to the upstream LLM without:
+- preprocessing
+- category matching
+- request transforms
+- cache lookup / write
+- session logging
+
+Each pattern checks if `messages[].role === 'system'` and `messages[].content.startsWith(pattern)`.
+All patterns must match at least one system message to trigger the skip.
+
+```json
+{
+  "sessionLogSkip": [
+    { "pattern": "You are an expert coding assistant operating inside pi,", "log": true }
+  ]
+}
+```
+
+The `log` field (default: `false`) controls whether an info-level log is emitted when a request is skipped.
+
 ### Preprocessing
 
 The `preprocessing` section allows you to replace user message content before category matching is applied. This is useful for normalizing or simplifying complex prompts.

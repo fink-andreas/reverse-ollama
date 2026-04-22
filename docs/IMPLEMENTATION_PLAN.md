@@ -370,4 +370,42 @@ The MVP is done when:
 
 ## Post-M11 Extensions (in progress)
 
-(No extensions currently in progress)
+### Session Skip Feature
+Skip session logging for requests that match configured patterns in system messages.
+
+**Goal:** Allow requests to bypass all session logging infrastructure when matched.
+
+**Use case:** Forwarding agentic requests (like pi coding assistant) without storing session files.
+
+**Tasks:**
+1. Extend config schema with `sessionLogSkip` array (patterns + optional `log` flag)
+2. Create `src/session-skip.js` detection module:
+   - Check `messages[].role === 'system'` and `messages[].content.startsWith(pattern)` for each pattern
+   - Return `true` (skip) only if **all** patterns match at least one message
+   - Patterns use `startsWith` semantics internally
+3. Integrate into `src/proxy.js`:
+   - Run skip check **before** preprocessing
+   - If matched, bypass: preprocessing, category matching, transforms, cache lookup, cache write, session logging
+   - Log at info level if `log: true` in matched config entry
+   - All other requests flow normally
+4. Add unit tests for session-skip detection logic
+
+**Config example:**
+```json
+{
+  "sessionLogSkip": [
+    { "pattern": "You are an expert coding assistant operating inside pi,", "log": true }
+  ]
+}
+```
+
+**Flow:**
+```
+parse body → sessionLogSkip check → if matched: SKIP (forward direct to LLM)
+                                    → if not matched: continue normal flow
+```
+
+**Deliverable:**
+- Matching requests bypass session logging completely
+- Optional info-level log when skipped (controlled by `log` flag)
+- Non-matching requests unaffected

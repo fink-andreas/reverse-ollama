@@ -11,6 +11,19 @@ const schema = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    sessionLogSkip: {
+      type: 'array',
+      default: [],
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['pattern'],
+        properties: {
+          pattern: { type: 'string', minLength: 1 },
+          log: { type: 'boolean', default: false },
+        },
+      },
+    },
     preprocessing: {
       type: 'object',
       additionalProperties: false,
@@ -129,8 +142,16 @@ function compilePreprocessingPatterns(preprocessing, configPath) {
 export function normalizeConfig(config) {
   const normalizedPreprocessing = compilePreprocessingPatterns(config.preprocessing, 'config');
 
+  const sessionLogSkip = Array.isArray(config.sessionLogSkip)
+    ? config.sessionLogSkip.map((entry) => ({
+        pattern: entry.pattern || '',
+        log: entry.log === true,
+      }))
+    : [];
+
   return {
     preprocessing: normalizedPreprocessing,
+    sessionLogSkip,
     categories: config.categories.map((category) => {
       const flags = category.match?.flags || '';
       const compiledMatchers = {
